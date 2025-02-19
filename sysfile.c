@@ -449,3 +449,10 @@ sys_hello(void)
     cprintf("hello world\n");
     return 0;
 }
+
+int sys_demohello(void)
+{
+    asm volatile("int $0x6e");
+    cprintf("the nested syscall has returned here\n");
+    return 0;
+}

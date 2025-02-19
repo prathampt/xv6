@@ -39,7 +39,7 @@ trap(struct trapframe *tf)
   if(tf->trapno == T_SYSCALL){
     if(myproc()->killed)
       exit();
-    myproc()->tf = tf;
+    // myproc()->tf = tf;
     syscall();
     if(myproc()->killed)
       exit();
@@ -79,6 +79,9 @@ trap(struct trapframe *tf)
     break;
 
   //PAGEBREAK: 13
+  case 110:
+    cprintf("our new trap\n");
+    break;
   default:
     if(myproc() == 0 || (tf->cs&3) == 0){
       // In kernel, it must be our mistake.

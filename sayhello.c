@@ -6,6 +6,7 @@
 int
 main(int argc, char *argv[])
 {
-    hello();
+    demohello();
+    printf(1, "Hello\n");
     exit();
 }
