@@ -14,3 +14,10 @@ kernel
 kernelmemfs
 mkfs
 .gdbinit
+cscope.out
+doxyconfig
+doxygen/
+hello.patch
+make-output.txt
+proc
+tags
