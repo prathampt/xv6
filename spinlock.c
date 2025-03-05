@@ -106,10 +106,11 @@ pushcli(void)
 {
   int eflags;
 
-  eflags = readeflags();
   cli();
-  if(mycpu()->ncli == 0)
+  if(mycpu()->ncli == 0){
+    eflags = readeflags();
     mycpu()->intena = eflags & FL_IF;
+  }
   mycpu()->ncli += 1;
 }
 
