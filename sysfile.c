@@ -446,6 +446,31 @@ sys_pipe(void)
 int
 sys_hello(void)
 {
-    cprintf("hello world\n");
+    cprintf("ncpu: %d\n", ncpu);
+    uint i;
+    pushcli();
+    for(i = 0; i < NCPU; i++) {
+        cprintf("apicid: %d\t", cpus[i].apicid);
+        if(cpus[i].proc) {
+            cprintf("%d: %s\n", cpus[i].proc->pid, cpus[i].proc->name);
+        }
+        else {
+            cprintf("i: %d\n", i);
+        }
+    }
+    cprintf("completed printing the array\n");
+    popcli();
+
+    extern struct {
+        struct spinlock lock;
+        struct proc proc[NPROC];
+    } ptable;
+    acquire(&ptable.lock);
+    struct proc *p = ptable.proc;
+    for(i = 0; i < NPROC; i++) {
+        cprintf("%d: %d: %s\n", i, p->pid, p->name);
+        p++;
+    }
+    release(&ptable.lock);
     return 0;
 }

@@ -41,6 +41,7 @@ main(void)
 static void
 mpenter(void)
 {
+  cprintf("mpenter() called\n");
   switchkvm();
   seginit();
   lapicinit();
@@ -63,6 +64,7 @@ pde_t entrypgdir[];  // For entry.S
 static void
 startothers(void)
 {
+  cprintf("startothers() called\n");
   extern uchar _binary_entryother_start[], _binary_entryother_size[];
   uchar *code;
   struct cpu *c;
