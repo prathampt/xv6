@@ -77,6 +77,10 @@ trap(struct trapframe *tf)
             cpuid(), tf->cs, tf->eip);
     lapiceoi();
     break;
+  case T_PGFLT:
+    cprintf("pagefalut\n");
+  case 13: // Not breaking to let it continue the normal execution...
+    cprintf("general protection fault\n");
 
   //PAGEBREAK: 13
   default:

@@ -79,8 +79,8 @@ spin:
 .p2align 2                                # force 4 byte alignment
 gdt:
   SEG_NULLASM                             # null seg
-  SEG_ASM(STA_X|STA_R, 0x0, 0xffffffff)   # code seg
-  SEG_ASM(STA_W, 0x0, 0xffffffff)         # data seg
+  SEG_ASM(STA_X|STA_R, 0x0, 0x8000)   # code seg
+  SEG_ASM(STA_W, 0x0, 0x8000)         # data seg
 
 gdtdesc:
   .word   (gdtdesc - gdt - 1)             # sizeof(gdt) - 1
