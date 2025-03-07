@@ -1,3 +1,8 @@
+// Macros for the lseek syscall
+#define SEEK_SET 1
+#define SEEK_CUR 2
+#define SEEK_END 3
+
 struct stat;
 struct rtcdate;
 
@@ -23,7 +28,7 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
-
+int lseek(int, int, int);
 // ulib.c
 int stat(const char*, struct stat*);
 char* strcpy(char*, const char*);
