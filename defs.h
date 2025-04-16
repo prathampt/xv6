@@ -120,6 +120,8 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
+int             chpr(int, int);
+void            modify_TICR(int);
 
 // swtch.S
 void            swtch(struct context**, struct context*);

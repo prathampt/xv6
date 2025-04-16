@@ -88,6 +88,7 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->priority = 1; // default priority 1
 
   release(&ptable.lock);
 
@@ -174,6 +175,21 @@ growproc(int n)
   return 0;
 }
 
+int
+chpr(int pid, int priority)
+{
+  struct proc *p;
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->pid == pid){
+      p->priority = priority;
+	  break;
+	}
+  }
+  release(&ptable.lock);
+  return pid;
+}
+
 // Create a new process copying p as the parent.
 // Sets up stack to return as if from system call.
 // Caller must set state of returned proc to RUNNABLE.
@@ -198,6 +214,7 @@ fork(void)
   }
   np->sz = curproc->sz;
   np->parent = curproc;
+  np->priority = (curproc->priority + 1 == 4) ? 3 : curproc->priority + 1;
   *np->tf = *curproc->tf;
 
   // Clear %eax so that fork returns 0 in the child.
@@ -325,6 +342,7 @@ scheduler(void)
   struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
+  int pri_queue = 1; // For Priority Queue-RR
   
   for(;;){
     // Enable interrupts on this processor.
@@ -335,6 +353,8 @@ scheduler(void)
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
+      if(p->priority != pri_queue)
+        continue;
 
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
@@ -342,6 +362,7 @@ scheduler(void)
       c->proc = p;
       switchuvm(p);
       p->state = RUNNING;
+      modify_TICR(10000000 * (p->priority + 1)); // Priority based time quantum
 
       swtch(&(c->scheduler), p->context);
       switchkvm();
@@ -349,8 +370,10 @@ scheduler(void)
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       c->proc = 0;
+      pri_queue = (pri_queue + 1) % 4;
     }
     release(&ptable.lock);
+    pri_queue = (pri_queue + 1) % 4;
 
   }
 }

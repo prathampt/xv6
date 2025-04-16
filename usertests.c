@@ -366,11 +366,13 @@ preempt(void)
   if(pid1 == 0)
     for(;;)
       ;
+  printf(1, "preempt: p1 created");
 
   pid2 = fork();
   if(pid2 == 0)
     for(;;)
       ;
+  printf(1, "preempt: p2 created");
 
   pipe(pfds);
   pid3 = fork();
@@ -382,13 +384,17 @@ preempt(void)
     for(;;)
       ;
   }
+  printf(1, "preempt: p3 created");
 
   close(pfds[1]);
+  printf(1, "preempt: close 1");
   if(read(pfds[0], buf, sizeof(buf)) != 1){
     printf(1, "preempt read error");
     return;
   }
+  printf(1, "preempt: before close 0");
   close(pfds[0]);
+  printf(1, "preempt: close 0");
   printf(1, "kill... ");
   kill(pid1);
   kill(pid2);
@@ -1746,6 +1752,13 @@ rand()
 }
 
 int
+test_priority_sched()
+{
+
+    return 0;
+}
+
+int
 main(int argc, char *argv[])
 {
   printf(1, "usertests starting\n");
@@ -1793,6 +1806,9 @@ main(int argc, char *argv[])
   dirfile();
   iref();
   forktest();
+
+  test_priority_sched();
+
   bigdir(); // slow
 
   uio();

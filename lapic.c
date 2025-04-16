@@ -40,7 +40,7 @@
 #define TICR    (0x0380/4)   // Timer Initial Count
 #define TCCR    (0x0390/4)   // Timer Current Count
 #define TDCR    (0x03E0/4)   // Timer Divide Configuration
-
+#define MAX_SLICE 0xffffffff
 volatile uint *lapic;  // Initialized in mp.c
 
 //PAGEBREAK!
@@ -49,6 +49,15 @@ lapicw(int index, int value)
 {
   lapic[index] = value;
   lapic[ID];  // wait for write to finish, by reading
+}
+
+void
+modify_TICR(int ts)
+{
+  if(ts > MAX_SLICE)
+    lapicw(TICR, MAX_SLICE);
+  else
+    lapicw(TICR, ts);
 }
 
 void
@@ -66,7 +75,7 @@ lapicinit(void)
   // TICR would be calibrated using an external time source.
   lapicw(TDCR, X1);
   lapicw(TIMER, PERIODIC | (T_IRQ0 + IRQ_TIMER));
-  lapicw(TICR, 10000000);
+  lapicw(TICR, 10000000); // Initial setup
 
   // Disable logical interrupt lines.
   lapicw(LINT0, MASKED);
