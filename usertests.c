@@ -366,13 +366,11 @@ preempt(void)
   if(pid1 == 0)
     for(;;)
       ;
-  printf(1, "preempt: p1 created");
 
   pid2 = fork();
   if(pid2 == 0)
     for(;;)
       ;
-  printf(1, "preempt: p2 created");
 
   pipe(pfds);
   pid3 = fork();
@@ -384,17 +382,13 @@ preempt(void)
     for(;;)
       ;
   }
-  printf(1, "preempt: p3 created");
 
   close(pfds[1]);
-  printf(1, "preempt: close 1");
   if(read(pfds[0], buf, sizeof(buf)) != 1){
     printf(1, "preempt read error");
     return;
   }
-  printf(1, "preempt: before close 0");
   close(pfds[0]);
-  printf(1, "preempt: close 0");
   printf(1, "kill... ");
   kill(pid1);
   kill(pid2);
@@ -1751,11 +1745,99 @@ rand()
   return randstate;
 }
 
-int
-test_priority_sched()
-{
+void cpu_bound() {
+    for(volatile int i = 0; i < 100000000; i++) {
+        // busy wait
+    }
+}
 
-    return 0;
+void io_bound() {
+    for(int j = 0; j < 10; j++) {
+        for(volatile int i = 0; i < 100000; i++) {
+            // busy wait
+        }
+        sleep(1);
+    }
+}
+void rr_test() {
+    printf(1, "Round-robin scheduling:\n");
+    int start1 = uptime();
+    int N = 5; // number of CPU-bound processes
+    int M = 5; // number of I/O-bound processes
+    for(int i = 0; i < N; i++) {
+        if(fork() == 0) {
+            cpu_bound();
+            exit();
+        }
+    }
+    for(int i = 0; i < M; i++) {
+        if(fork() == 0) {
+            io_bound();
+            exit();
+        }
+    }
+    // Wait for all children
+    for(int i = 0; i < N + M; i++) {
+        wait();
+    }
+    int end1 = uptime();
+    int time_taken1 = end1 - start1;
+    if(time_taken1 == 0) {
+        printf(1, "Time taken is zero, cannot compute throughput\n");
+    } else {
+        int throughput_scaled1 = (N + M) * 10000 / time_taken1;
+        printf(1, "Throughput: %d.%d processes per second\n", throughput_scaled1 / 100, throughput_scaled1 % 100);
+    }
+    return;
+}
+
+void priority_queue_test() {
+    int N = 5; // number of CPU-bound processes
+    int M = 5; // number of I/O-bound processes
+    printf(1, "Priority scheduling:\n");
+    int start2 = uptime();
+    int child_pid;
+    for(int i = 0; i < N; i++) {
+        child_pid = fork(); 
+        if(child_pid == 0) {
+            cpu_bound();
+            exit();
+        }
+        else {
+            nice(child_pid, 3); // low priority for CPU-bound
+        }
+    }
+    for(int i = 0; i < M; i++) {
+        child_pid = fork(); 
+        if(child_pid == 0) {
+            io_bound();
+            exit();
+        }
+        else {
+            nice(child_pid, 0); // high priority for IO-bound
+        }
+    }
+    // Wait for all children
+    for(int i = 0; i < N + M; i++) {
+        wait();
+    }
+    int end2 = uptime();
+    int time_taken2 = end2 - start2;
+    if(time_taken2 == 0) {
+        printf(1, "Time taken is zero, cannot compute throughput\n");
+    } else {
+        int throughput_scaled2 = (N + M) * 10000 / time_taken2;
+        printf(1, "Throughput: %d.%02d processes per second\n", throughput_scaled2 / 100, throughput_scaled2 % 100);
+    }
+    return;
+}
+void test_scheduling() {
+    printf(1, "=== Testing scheduling throughput ===\n");
+
+    // Test 1: Round-robin (default priorities)
+    //rr_test();
+    // Test 2: Priority scheduling
+    priority_queue_test();
 }
 
 int
@@ -1807,7 +1889,7 @@ main(int argc, char *argv[])
   iref();
   forktest();
 
-  test_priority_sched();
+  test_scheduling();
 
   bigdir(); // slow
 

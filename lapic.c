@@ -10,6 +10,8 @@
 #include "mmu.h"
 #include "x86.h"
 
+#define MAX_SLICE 0xffffffff
+
 // Local APIC registers, divided by 4 for use as uint[] indices.
 #define ID      (0x0020/4)   // ID
 #define VER     (0x0030/4)   // Version
@@ -40,7 +42,6 @@
 #define TICR    (0x0380/4)   // Timer Initial Count
 #define TCCR    (0x0390/4)   // Timer Current Count
 #define TDCR    (0x03E0/4)   // Timer Divide Configuration
-#define MAX_SLICE 0xffffffff
 volatile uint *lapic;  // Initialized in mp.c
 
 //PAGEBREAK!
@@ -75,7 +76,7 @@ lapicinit(void)
   // TICR would be calibrated using an external time source.
   lapicw(TDCR, X1);
   lapicw(TIMER, PERIODIC | (T_IRQ0 + IRQ_TIMER));
-  lapicw(TICR, 10000000); // Initial setup
+  //lapicw(TICR, 10000000);
 
   // Disable logical interrupt lines.
   lapicw(LINT0, MASKED);

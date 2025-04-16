@@ -12,7 +12,7 @@ main(int argc, char *argv[])
 {
   int priority, pid;
   if(argc < 3){
-    printf(2,"Usage: nice pid priority:[0,3]\n");
+    printf(2,"Usage: nice pid priority:[0,3]{0 is highest priority}\n");
     exit();
   }
   pid = atoi(argv[1]);
@@ -21,6 +21,6 @@ main(int argc, char *argv[])
     printf(2,"Invalid priority [0,4)!\n");
     exit();
   }
-  chpr(pid, priority);
+  nice(pid, priority);
   exit();
 }

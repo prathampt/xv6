@@ -176,7 +176,7 @@ growproc(int n)
 }
 
 int
-chpr(int pid, int priority)
+nice(int pid, int priority)
 {
   struct proc *p;
   acquire(&ptable.lock);
@@ -214,7 +214,7 @@ fork(void)
   }
   np->sz = curproc->sz;
   np->parent = curproc;
-  np->priority = (curproc->priority + 1 == 4) ? 3 : curproc->priority + 1;
+  np->priority = curproc->priority;
   *np->tf = *curproc->tf;
 
   // Clear %eax so that fork returns 0 in the child.
@@ -343,26 +343,35 @@ scheduler(void)
   struct cpu *c = mycpu();
   c->proc = 0;
   int pri_queue = 1; // For Priority Queue-RR
-  
+  int pri_arr[] = {0, 0, 0, 0};
+  int i;
+
   for(;;){
     // Enable interrupts on this processor.
     sti();
 
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
+    for(p = ptable.proc, i = 0; p < &ptable.proc[NPROC]; p++, i++){
+      p = &ptable.proc[pri_arr[pri_queue]];
+      i = pri_arr[pri_queue];
+      if(p->state != RUNNABLE) {
+        pri_arr[pri_queue] = (i + 1) % NPROC;
         continue;
-      if(p->priority != pri_queue)
+      }
+      if(p->priority != pri_queue) {
+        //cprintf("scheduler: pri_queue %d, p->priority %d\n", pri_queue, p->priority);
+        pri_arr[pri_queue] = (i + 1) % NPROC;
         continue;
+      }
 
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
+      modify_TICR(10000000 * (4 - p->priority)); // Priority based time quantum
       c->proc = p;
       switchuvm(p);
       p->state = RUNNING;
-      modify_TICR(10000000 * (p->priority + 1)); // Priority based time quantum
 
       swtch(&(c->scheduler), p->context);
       switchkvm();
@@ -370,6 +379,7 @@ scheduler(void)
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       c->proc = 0;
+      pri_arr[pri_queue] = (i + 1) % NPROC;
       pri_queue = (pri_queue + 1) % 4;
     }
     release(&ptable.lock);

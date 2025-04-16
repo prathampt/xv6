@@ -120,7 +120,7 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
-int             chpr(int, int);
+int             nice(int, int);
 void            modify_TICR(int);
 
 // swtch.S
