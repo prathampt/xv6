@@ -1798,7 +1798,7 @@ void priority_queue_test() {
     int start2 = uptime();
     int child_pid;
     for(int i = 0; i < N; i++) {
-        child_pid = fork(); 
+        child_pid = fork();
         if(child_pid == 0) {
             cpu_bound();
             exit();
@@ -1808,7 +1808,7 @@ void priority_queue_test() {
         }
     }
     for(int i = 0; i < M; i++) {
-        child_pid = fork(); 
+        child_pid = fork();
         if(child_pid == 0) {
             io_bound();
             exit();
@@ -1827,7 +1827,7 @@ void priority_queue_test() {
         printf(1, "Time taken is zero, cannot compute throughput\n");
     } else {
         int throughput_scaled2 = (N + M) * 10000 / time_taken2;
-        printf(1, "Throughput: %d.%02d processes per second\n", throughput_scaled2 / 100, throughput_scaled2 % 100);
+        printf(1, "Throughput: %d.%d processes per second\n", throughput_scaled2 / 100, throughput_scaled2 % 100);
     }
     return;
 }
@@ -1839,6 +1839,20 @@ void test_scheduling() {
     // Test 2: Priority scheduling
     priority_queue_test();
 }
+
+/*
+ * RESULT:~
+ *
+ * === Testing scheduling throughput ===
+ * Priority scheduling:
+ * Throughput: 5.23 processes per second
+ *
+ *
+ * === Testing scheduling throughput ===
+ * Round-robin scheduling:
+ * Throughput: 4.95 processes per second
+ *
+ * */
 
 int
 main(int argc, char *argv[])

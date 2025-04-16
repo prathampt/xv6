@@ -342,7 +342,7 @@ scheduler(void)
   struct proc *p;
   struct cpu *c = mycpu();
   c->proc = 0;
-  int pri_queue = 1; // For Priority Queue-RR
+  int pri_queue = 1; // For RR in Priority Queue
   int pri_arr[] = {0, 0, 0, 0};
   int i;
 

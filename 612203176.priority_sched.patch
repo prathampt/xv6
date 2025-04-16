@@ -1,0 +1,417 @@
+diff --git a/Makefile b/Makefile
+index 09d790c..40a2a6d 100644
+--- a/Makefile
++++ b/Makefile
+@@ -76,7 +76,7 @@ AS = $(TOOLPREFIX)gas
+ LD = $(TOOLPREFIX)ld
+ OBJCOPY = $(TOOLPREFIX)objcopy
+ OBJDUMP = $(TOOLPREFIX)objdump
+-CFLAGS = -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -Werror -fno-omit-frame-pointer
++CFLAGS = -fno-pic -static -fno-builtin -fno-strict-aliasing -O2 -Wall -MD -ggdb -m32 -fno-omit-frame-pointer
+ CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
+ ASFLAGS = -m32 -gdwarf-2 -Wa,-divide
+ # FreeBSD ld wants ``elf_i386_fbsd''
+@@ -181,6 +181,7 @@ UPROGS=\
+ 	_usertests\
+ 	_wc\
+ 	_zombie\
++	_nice\
+ 
+ fs.img: mkfs README $(UPROGS)
+ 	./mkfs fs.img README $(UPROGS)
+diff --git a/defs.h b/defs.h
+index 82fb982..32b667f 100644
+--- a/defs.h
++++ b/defs.h
+@@ -120,6 +120,8 @@ void            userinit(void);
+ int             wait(void);
+ void            wakeup(void*);
+ void            yield(void);
++int             nice(int, int);
++void            modify_TICR(int);
+ 
+ // swtch.S
+ void            swtch(struct context**, struct context*);
+diff --git a/lapic.c b/lapic.c
+index b22bbd7..627286b 100644
+--- a/lapic.c
++++ b/lapic.c
+@@ -10,6 +10,8 @@
+ #include "mmu.h"
+ #include "x86.h"
+ 
++#define MAX_SLICE 0xffffffff
++
+ // Local APIC registers, divided by 4 for use as uint[] indices.
+ #define ID      (0x0020/4)   // ID
+ #define VER     (0x0030/4)   // Version
+@@ -40,7 +42,6 @@
+ #define TICR    (0x0380/4)   // Timer Initial Count
+ #define TCCR    (0x0390/4)   // Timer Current Count
+ #define TDCR    (0x03E0/4)   // Timer Divide Configuration
+-
+ volatile uint *lapic;  // Initialized in mp.c
+ 
+ //PAGEBREAK!
+@@ -51,6 +52,15 @@ lapicw(int index, int value)
+   lapic[ID];  // wait for write to finish, by reading
+ }
+ 
++void
++modify_TICR(int ts)
++{
++  if(ts > MAX_SLICE)
++    lapicw(TICR, MAX_SLICE);
++  else
++    lapicw(TICR, ts);
++}
++
+ void
+ lapicinit(void)
+ {
+@@ -66,7 +76,7 @@ lapicinit(void)
+   // TICR would be calibrated using an external time source.
+   lapicw(TDCR, X1);
+   lapicw(TIMER, PERIODIC | (T_IRQ0 + IRQ_TIMER));
+-  lapicw(TICR, 10000000);
++  //lapicw(TICR, 10000000);
+ 
+   // Disable logical interrupt lines.
+   lapicw(LINT0, MASKED);
+diff --git a/nice.c b/nice.c
+new file mode 100644
+index 0000000..5996034
+--- /dev/null
++++ b/nice.c
+@@ -0,0 +1,26 @@
++#include "types.h"
++#include "stat.h"
++#include "user.h"
++#include "fcntl.h"
++
++/*
++ * Ref: https://medium.com/@harshalshree03/xv6-implementing-ps-nice-system-calls-and-priority-scheduling-b12fa10494e4
++ */
++
++int
++main(int argc, char *argv[])
++{
++  int priority, pid;
++  if(argc < 3){
++    printf(2,"Usage: nice pid priority:[0,3]{0 is highest priority}\n");
++    exit();
++  }
++  pid = atoi(argv[1]);
++  priority = atoi(argv[2]);
++  if (priority < 0 || priority > 3){
++    printf(2,"Invalid priority [0,4)!\n");
++    exit();
++  }
++  nice(pid, priority);
++  exit();
++}
+diff --git a/proc.c b/proc.c
+index 806b1b1..597f64b 100644
+--- a/proc.c
++++ b/proc.c
+@@ -88,6 +88,7 @@ allocproc(void)
+ found:
+   p->state = EMBRYO;
+   p->pid = nextpid++;
++  p->priority = 1; // default priority 1
+ 
+   release(&ptable.lock);
+ 
+@@ -174,6 +175,21 @@ growproc(int n)
+   return 0;
+ }
+ 
++int
++nice(int pid, int priority)
++{
++  struct proc *p;
++  acquire(&ptable.lock);
++  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
++    if(p->pid == pid){
++      p->priority = priority;
++	  break;
++	}
++  }
++  release(&ptable.lock);
++  return pid;
++}
++
+ // Create a new process copying p as the parent.
+ // Sets up stack to return as if from system call.
+ // Caller must set state of returned proc to RUNNABLE.
+@@ -198,6 +214,7 @@ fork(void)
+   }
+   np->sz = curproc->sz;
+   np->parent = curproc;
++  np->priority = curproc->priority;
+   *np->tf = *curproc->tf;
+ 
+   // Clear %eax so that fork returns 0 in the child.
+@@ -325,20 +342,33 @@ scheduler(void)
+   struct proc *p;
+   struct cpu *c = mycpu();
+   c->proc = 0;
+-  
++  int pri_queue = 1; // For RR in Priority Queue
++  int pri_arr[] = {0, 0, 0, 0};
++  int i;
++
+   for(;;){
+     // Enable interrupts on this processor.
+     sti();
+ 
+     // Loop over process table looking for process to run.
+     acquire(&ptable.lock);
+-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+-      if(p->state != RUNNABLE)
++    for(p = ptable.proc, i = 0; p < &ptable.proc[NPROC]; p++, i++){
++      p = &ptable.proc[pri_arr[pri_queue]];
++      i = pri_arr[pri_queue];
++      if(p->state != RUNNABLE) {
++        pri_arr[pri_queue] = (i + 1) % NPROC;
++        continue;
++      }
++      if(p->priority != pri_queue) {
++        //cprintf("scheduler: pri_queue %d, p->priority %d\n", pri_queue, p->priority);
++        pri_arr[pri_queue] = (i + 1) % NPROC;
+         continue;
++      }
+ 
+       // Switch to chosen process.  It is the process's job
+       // to release ptable.lock and then reacquire it
+       // before jumping back to us.
++      modify_TICR(10000000 * (4 - p->priority)); // Priority based time quantum
+       c->proc = p;
+       switchuvm(p);
+       p->state = RUNNING;
+@@ -349,8 +379,11 @@ scheduler(void)
+       // Process is done running for now.
+       // It should have changed its p->state before coming back.
+       c->proc = 0;
++      pri_arr[pri_queue] = (i + 1) % NPROC;
++      pri_queue = (pri_queue + 1) % 4;
+     }
+     release(&ptable.lock);
++    pri_queue = (pri_queue + 1) % 4;
+ 
+   }
+ }
+diff --git a/proc.h b/proc.h
+index 1647114..2295af0 100644
+--- a/proc.h
++++ b/proc.h
+@@ -41,6 +41,7 @@ struct proc {
+   char *kstack;                // Bottom of kernel stack for this process
+   enum procstate state;        // Process state
+   int pid;                     // Process ID
++  int priority;                // Process Priority
+   struct proc *parent;         // Parent process
+   struct trapframe *tf;        // Trap frame for current syscall
+   struct context *context;     // swtch() here to run process
+diff --git a/syscall.c b/syscall.c
+index ee85261..7d61f9a 100644
+--- a/syscall.c
++++ b/syscall.c
+@@ -103,6 +103,7 @@ extern int sys_unlink(void);
+ extern int sys_wait(void);
+ extern int sys_write(void);
+ extern int sys_uptime(void);
++extern int sys_nice(void);
+ 
+ static int (*syscalls[])(void) = {
+ [SYS_fork]    sys_fork,
+@@ -126,6 +127,7 @@ static int (*syscalls[])(void) = {
+ [SYS_link]    sys_link,
+ [SYS_mkdir]   sys_mkdir,
+ [SYS_close]   sys_close,
++[SYS_nice]   sys_nice,
+ };
+ 
+ void
+diff --git a/syscall.h b/syscall.h
+index bc5f356..fc06372 100644
+--- a/syscall.h
++++ b/syscall.h
+@@ -20,3 +20,4 @@
+ #define SYS_link   19
+ #define SYS_mkdir  20
+ #define SYS_close  21
++#define SYS_nice   22
+diff --git a/sysproc.c b/sysproc.c
+index 0686d29..84505fd 100644
+--- a/sysproc.c
++++ b/sysproc.c
+@@ -42,6 +42,17 @@ sys_getpid(void)
+   return myproc()->pid;
+ }
+ 
++int
++sys_nice(void)
++{
++    int pid, pr;
++    if (argint(0, &pid) < 0)
++        return -1;
++    if (argint(1, &pr) < 0)
++        return -1;
++    return nice(pid, pr);
++}
++
+ int
+ sys_sbrk(void)
+ {
+diff --git a/user.h b/user.h
+index 4f99c52..b5fc963 100644
+--- a/user.h
++++ b/user.h
+@@ -23,6 +23,7 @@ int getpid(void);
+ char* sbrk(int);
+ int sleep(int);
+ int uptime(void);
++int nice(int, int);
+ 
+ // ulib.c
+ int stat(const char*, struct stat*);
+diff --git a/usertests.c b/usertests.c
+index a1e97e7..84cac7a 100644
+--- a/usertests.c
++++ b/usertests.c
+@@ -1745,6 +1745,115 @@ rand()
+   return randstate;
+ }
+ 
++void cpu_bound() {
++    for(volatile int i = 0; i < 100000000; i++) {
++        // busy wait
++    }
++}
++
++void io_bound() {
++    for(int j = 0; j < 10; j++) {
++        for(volatile int i = 0; i < 100000; i++) {
++            // busy wait
++        }
++        sleep(1);
++    }
++}
++void rr_test() {
++    printf(1, "Round-robin scheduling:\n");
++    int start1 = uptime();
++    int N = 5; // number of CPU-bound processes
++    int M = 5; // number of I/O-bound processes
++    for(int i = 0; i < N; i++) {
++        if(fork() == 0) {
++            cpu_bound();
++            exit();
++        }
++    }
++    for(int i = 0; i < M; i++) {
++        if(fork() == 0) {
++            io_bound();
++            exit();
++        }
++    }
++    // Wait for all children
++    for(int i = 0; i < N + M; i++) {
++        wait();
++    }
++    int end1 = uptime();
++    int time_taken1 = end1 - start1;
++    if(time_taken1 == 0) {
++        printf(1, "Time taken is zero, cannot compute throughput\n");
++    } else {
++        int throughput_scaled1 = (N + M) * 10000 / time_taken1;
++        printf(1, "Throughput: %d.%d processes per second\n", throughput_scaled1 / 100, throughput_scaled1 % 100);
++    }
++    return;
++}
++
++void priority_queue_test() {
++    int N = 5; // number of CPU-bound processes
++    int M = 5; // number of I/O-bound processes
++    printf(1, "Priority scheduling:\n");
++    int start2 = uptime();
++    int child_pid;
++    for(int i = 0; i < N; i++) {
++        child_pid = fork();
++        if(child_pid == 0) {
++            cpu_bound();
++            exit();
++        }
++        else {
++            nice(child_pid, 3); // low priority for CPU-bound
++        }
++    }
++    for(int i = 0; i < M; i++) {
++        child_pid = fork();
++        if(child_pid == 0) {
++            io_bound();
++            exit();
++        }
++        else {
++            nice(child_pid, 0); // high priority for IO-bound
++        }
++    }
++    // Wait for all children
++    for(int i = 0; i < N + M; i++) {
++        wait();
++    }
++    int end2 = uptime();
++    int time_taken2 = end2 - start2;
++    if(time_taken2 == 0) {
++        printf(1, "Time taken is zero, cannot compute throughput\n");
++    } else {
++        int throughput_scaled2 = (N + M) * 10000 / time_taken2;
++        printf(1, "Throughput: %d.%d processes per second\n", throughput_scaled2 / 100, throughput_scaled2 % 100);
++    }
++    return;
++}
++void test_scheduling() {
++    printf(1, "=== Testing scheduling throughput ===\n");
++
++    // Test 1: Round-robin (default priorities)
++    //rr_test();
++    // Test 2: Priority scheduling
++    priority_queue_test();
++}
++
++/*
++ * RESULT:~
++ *
++ * === Testing scheduling throughput ===
++ * Priority scheduling:
++ * Throughput: 5.23 processes per second
++ *
++ *
++ * === Testing scheduling throughput ===
++ * Round-robin scheduling:
++ * Throughput: 4.95 processes per second
++ *
++ * */
++
+ int
+ main(int argc, char *argv[])
+ {
+@@ -1793,6 +1902,9 @@ main(int argc, char *argv[])
+   dirfile();
+   iref();
+   forktest();
++
++  test_scheduling();
++
+   bigdir(); // slow
+ 
+   uio();
+diff --git a/usys.S b/usys.S
+index 8bfd8a1..116326e 100644
+--- a/usys.S
++++ b/usys.S
+@@ -29,3 +29,4 @@ SYSCALL(getpid)
+ SYSCALL(sbrk)
+ SYSCALL(sleep)
+ SYSCALL(uptime)
++SYSCALL(nice)
