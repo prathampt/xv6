@@ -282,6 +282,118 @@ create(char *path, short type, short major, short minor)
   return ip;
 }
 
+struct message {
+    struct message *next;
+	char *blob;
+	char buf[PGSIZE - (sizeof(void *) * 2)];
+};
+
+struct message *construct_msg(char *fmt, int vecnum, int argnum) {
+	// kfree() in counterpart function
+	struct message *m = (struct message *)kalloc();
+	// print to the given buffer. Only understands d, x, p, s, b
+	// b is a blob, which will be used when a large message payload like
+	// a file's blocks are to be sent
+	// blobs are also allocated by kalloc() and release by kfree()
+   
+    int *tmp = (int *)m->buf;
+    tmp[0] = vecnum;
+    tmp[1] = 599;
+
+    char *end_ptr = (char *)&tmp[2];
+    int bad = 0;
+
+    char c, *p, *str, *b;
+    while ((c = *fmt++) && !bad) {
+      switch (c) {
+        case 'd': case 'p': // assuming that sizeof(int) == sizeof(void *)
+          if (argint(argnum, (int *)end_ptr) < 0) {
+            bad = 1;
+          }
+          end_ptr += sizeof(int);
+          break;
+        case 's':
+          if (argstr(argnum, &str) == -1) {
+            bad = 1;
+            break;
+          }
+          while (*end_ptr++ = *str++)
+            ;
+          break;
+        case 'b':
+          if (argptr(argnum, &p, PGSIZE) < 0) {
+            bad = 1;
+            break;
+          }
+          m->blob = kalloc();
+          b = m->blob;
+          for (int i = 0; i < PGSIZE; i++) {
+            *b++ = *p++;
+          }
+          break;
+        default:
+          bad = 1;
+          break;
+      }
+      argnum++;
+    }
+
+    if (bad) {
+      if (m->blob) {
+        kfree(m->blob);
+      }
+      kfree((char *)m);
+      return 0;
+    }
+
+    return m;
+}
+#define CHAR_CHARNUM	0
+#define CHAR_NUM		1
+#define FORMAT_WISE		2
+
+int isalph(char ch) {
+	return (('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z'));
+}
+
+void printbuf(char *buf, int type, const char *fmt) {
+	unsigned char ch;
+	int i;
+	switch(type) {
+		case CHAR_NUM:
+			i = 0;
+			while(1) {
+				ch = buf[i];
+				cprintf("<%x>", ch);
+				i++;
+                if (i == PGSIZE) {
+                  break;
+                }
+			}
+			break;
+		case CHAR_CHARNUM:
+			i = 0;
+			while(1) {
+				ch = buf[i];
+				if(isalph(ch)) {
+					cprintf("<%c>", ch);
+				}
+				else {
+					cprintf("<%d>", ch);
+				}
+				i++;
+                if (i == PGSIZE) {
+                  break;
+                }
+			}
+			break;
+		default:
+			cprintf("invalid type of printing buffer\n");
+			break;
+	}
+	return;
+}
+
 int
 sys_open(void)
 {
@@ -292,6 +404,9 @@ sys_open(void)
 
   if(argstr(0, &path) < 0 || argint(1, &omode) < 0)
     return -1;
+
+  struct message *m = construct_msg("sd", 21, 0);
+  printbuf(m->buf, CHAR_NUM, 0);
 
   begin_op();
 
