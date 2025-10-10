@@ -291,6 +291,7 @@ struct message {
 struct message *construct_msg(char *fmt, int vecnum, int argnum) {
 	// kfree() in counterpart function
 	struct message *m = (struct message *)kalloc();
+    m->blob = 0;
 	// print to the given buffer. Only understands d, x, p, s, b
 	// b is a blob, which will be used when a large message payload like
 	// a file's blocks are to be sent
@@ -394,6 +395,65 @@ void printbuf(char *buf, int type, const char *fmt) {
 	return;
 }
 
+#define MAXSTRSIZE 64
+int deconstruct_msg(char *fmt, int argnum, struct message * m) {
+
+  char c;
+  int bad = 0;
+  int *ptr;
+  char *str, *end_ptr = m->buf, *b = m->blob;
+ 
+  while ((c = *fmt++) && !bad) {
+    switch (c) {
+      case 'd': case 'p':
+        if (argptr(argnum, &ptr, sizeof(int)) < 0) {
+          bad = 1;
+          break;
+        }
+        *ptr = *(int *)end_ptr; 
+        end_ptr += sizeof(int);
+        break;
+      case 's':
+        if (argptr(argnum, &str, MAXSTRSIZE) < 0) {
+          bad = 1;
+          break;
+        }
+        while (*str++ = *end_ptr++)
+          ;
+        break;
+      case 'b':
+        if (argptr(argnum, &str, PGSIZE) < 0 || !b) {
+          bad = 1;
+          break;
+        }
+        for (int i = 0; i < PGSIZE; i++) {
+          *str++ = *b++;
+        }
+        break;
+    }
+    argnum++;
+  }
+
+  if (m->blob) {
+    kfree(m->blob);
+  }
+  kfree((char *)m);
+
+  return bad;
+}
+
+struct message *msg;
+int sys_recv(void) {
+  char *fmt;
+
+  if(argstr(0, &fmt) < 0) {
+    return -1;
+  }
+  int argnum = 1;
+
+  return deconstruct_msg(fmt, argnum, msg);
+}
+
 int
 sys_open(void)
 {
@@ -405,8 +465,8 @@ sys_open(void)
   if(argstr(0, &path) < 0 || argint(1, &omode) < 0)
     return -1;
 
-  struct message *m = construct_msg("sd", 21, 0);
-  printbuf(m->buf, CHAR_NUM, 0);
+  msg = construct_msg("sd", 21, 0);
+  printbuf(msg->buf, CHAR_NUM, 0);
 
   begin_op();
 
