@@ -63,6 +63,9 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
 
+  // Fine grained lock
+  struct spinlock lock;
+
   // IPC
 
   // recv_proc will point to the process whose

@@ -9,9 +9,9 @@
 #include "param.h"
 #include "stat.h"
 #include "mmu.h"
+#include "spinlock.h"
 #include "proc.h"
 #include "fs.h"
-#include "spinlock.h"
 #include "sleeplock.h"
 #include "file.h"
 #include "fcntl.h"
@@ -295,6 +295,10 @@ int ksend(int src_index, int dst_index, struct message *m) {
   dst = &ptable.proc[dst_index];
 
   acquire(&ptable.lock);
+  // acquire both locks of src and dst process
+  acquire(&src->lock);
+  acquire(&dst->lock);
+  release(&ptable.lock);
 
   // check if the destination is LISTENING
   // this also implies that the queue of recieved messages is empty :)
@@ -302,7 +306,8 @@ int ksend(int src_index, int dst_index, struct message *m) {
     dst->recv_msg_queue = m;
     // can handle request immediately
     dst->state = RUNNABLE;
-    release(&ptable.lock);
+    release(&dst->lock);
+    release(&src->lock);
     return 0;
   }
   // need to append to the queue, dst is busy
@@ -313,7 +318,11 @@ int ksend(int src_index, int dst_index, struct message *m) {
     p = &(*p)->next;
   *p = m;
 
+  release(&dst->lock);
   src->state = SENDING;
+  release(&src->lock);
+
+  acquire(&ptable.lock);
   sched();
   release(&ptable.lock);
   return 0;
@@ -323,12 +332,15 @@ struct message *klisten(void) {
   struct proc *curproc = myproc();
 
   acquire(&ptable.lock);
+  acquire(&curproc->lock);
 
   // queue is empty
   if(!curproc->recv_msg_queue) {
     // need to change state to LISTENING and call sched()
     curproc->state = LISTENING;
+    release(&curproc->lock);
     sched();
+    acquire(&curproc->lock);
   }
 
   // we are here means that someone enqueued a message while we were
@@ -340,11 +352,14 @@ struct message *klisten(void) {
   
   curproc->recv_proc = m->src;
 
-  // make the src RUNNABLE if it is BLOCKED in ksend()
+  // make the src RUNNABLE if it is SENDING in ksend()
+  acquire(&m->src->lock);
   if(m->src->state == SENDING) {
     m->src->state = RUNNABLE;
   }
+  release(&m->src->lock);
 
+  release(&curproc->lock);
   release(&ptable.lock);
 
   return m;
@@ -357,15 +372,22 @@ int krply(int src_index, int dst_index, struct message *m) {
   dst = &ptable.proc[dst_index];
 
   acquire(&ptable.lock);
+  // acquire both locks of src and dst process
+  acquire(&dst->lock);
+  release(&ptable.lock);
 
   dst->rply_msg = m;
   if(dst->state == BLOCKED) {
     dst->state = RUNNABLE;
   }
+  release(&dst->lock);
 
-  src->recv_proc = 0;
-
+  acquire(&ptable.lock);
+  acquire(&src->lock);
   release(&ptable.lock);
+  src->recv_proc = 0;
+  release(&src->lock);
+
   return 0;
 }
 
@@ -373,12 +395,16 @@ struct message *krecv(void) {
   struct proc *curproc = myproc();
 
   acquire(&ptable.lock);
+  acquire(&curproc->lock);
 
   // reply yet to come
   if(!curproc->rply_msg) {
     // need to change state to BLOCKED and call sched()
     curproc->state = BLOCKED;
+    release(&curproc->lock);
     sched();
+    // re acquire() lock when scheduled again
+    acquire(&curproc->lock);
   }
 
   // we are here means that someone handled the request and called rply()
@@ -387,10 +413,12 @@ struct message *krecv(void) {
   struct message *m = curproc->rply_msg;
   curproc->rply_msg = 0;
   
+  release(&curproc->lock);
   release(&ptable.lock);
 
   return m;
 }
+
 
 #define MAXSTRSIZE 64
 

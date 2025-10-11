@@ -4,8 +4,8 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "x86.h"
-#include "proc.h"
 #include "spinlock.h"
+#include "proc.h"
 
 struct {
   struct spinlock lock;
@@ -24,6 +24,9 @@ void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
+  struct proc *p;
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+    initlock(&p->lock, "finegrained");
 }
 
 // Must be called with interrupts disabled
