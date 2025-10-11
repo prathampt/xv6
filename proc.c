@@ -112,6 +112,15 @@ found:
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
 
+  p->recv_proc = 0;
+
+  // Queue of recieved messages, manipulated by ksend()
+  p->recv_msg_queue = 0;
+
+  // A single message, manipulated by rply()
+  p->rply_msg = 0;
+
+
   return p;
 }
 
@@ -509,7 +518,9 @@ procdump(void)
   [SLEEPING]  "sleep ",
   [RUNNABLE]  "runble",
   [RUNNING]   "run   ",
-  [ZOMBIE]    "zombie"
+  [ZOMBIE]    "zombie",
+  [LISTENING]   "listening",
+  [BLOCKED]     "blocked"
   };
   int i;
   struct proc *p;
@@ -523,7 +534,7 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
-    cprintf("%d %s %s", p->pid, state, p->name);
+    cprintf("%d %d %s %s", p - (struct proc *) &ptable.proc, p->pid, state, p->name);
     if(p->state == SLEEPING){
       getcallerpcs((uint*)p->context->ebp+2, pc);
       for(i=0; i<10 && pc[i] != 0; i++)

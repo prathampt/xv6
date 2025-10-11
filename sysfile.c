@@ -16,6 +16,11 @@
 #include "file.h"
 #include "fcntl.h"
 
+extern struct {
+  struct spinlock lock;
+  struct proc proc[NPROC];
+} ptable;
+
 // Fetch the nth word-sized system call argument as a file descriptor
 // and return both the descriptor and the corresponding struct file.
 static int
@@ -282,126 +287,191 @@ create(char *path, short type, short major, short minor)
   return ip;
 }
 
-struct message {
-    struct message *next;
-	char *blob;
-	char buf[PGSIZE - (sizeof(void *) * 2)];
-};
+// IPC:
+int ksend(int src_index, int dst_index, struct message *m) {
+  struct proc *src, *dst;
 
-struct message *construct_msg(char *fmt, int vecnum, int argnum) {
-	// kfree() in counterpart function
-	struct message *m = (struct message *)kalloc();
-    m->blob = 0;
-	// print to the given buffer. Only understands d, x, p, s, b
-	// b is a blob, which will be used when a large message payload like
-	// a file's blocks are to be sent
-	// blobs are also allocated by kalloc() and release by kfree()
-   
-    int *tmp = (int *)m->buf;
-    tmp[0] = vecnum;
-    tmp[1] = 599;
+  src = &ptable.proc[src_index];
+  dst = &ptable.proc[dst_index];
 
-    char *end_ptr = (char *)&tmp[2];
-    int bad = 0;
+  acquire(&ptable.lock);
 
-    char c, *p, *str, *b;
-    while ((c = *fmt++) && !bad) {
-      switch (c) {
-        case 'd': case 'p': // assuming that sizeof(int) == sizeof(void *)
-          if (argint(argnum, (int *)end_ptr) < 0) {
-            bad = 1;
-          }
-          end_ptr += sizeof(int);
-          break;
-        case 's':
-          if (argstr(argnum, &str) == -1) {
-            bad = 1;
-            break;
-          }
-          while (*end_ptr++ = *str++)
-            ;
-          break;
-        case 'b':
-          if (argptr(argnum, &p, PGSIZE) < 0) {
-            bad = 1;
-            break;
-          }
-          m->blob = kalloc();
-          b = m->blob;
-          for (int i = 0; i < PGSIZE; i++) {
-            *b++ = *p++;
-          }
-          break;
-        default:
-          bad = 1;
-          break;
-      }
-      argnum++;
-    }
+  // check if the destination is LISTENING
+  // this also implies that the queue of recieved messages is empty :)
+  if(dst->state == LISTENING) {
+    dst->recv_msg_queue = m;
+    // can handle request immediately
+    dst->state = RUNNABLE;
+    release(&ptable.lock);
+    return 0;
+  }
+  // need to append to the queue, dst is busy
+  struct message **p = &dst->recv_msg_queue;
 
-    if (bad) {
-      if (m->blob) {
-        kfree(m->blob);
-      }
-      kfree((char *)m);
-      return 0;
-    }
+  // good taste in code :)
+  while(*p)
+    p = &(*p)->next;
+  *p = m;
 
-    return m;
-}
-#define CHAR_CHARNUM	0
-#define CHAR_NUM		1
-#define FORMAT_WISE		2
-
-int isalph(char ch) {
-	return (('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z'));
+  src->state = BLOCKED;
+  sched();
+  release(&ptable.lock);
+  return 0;
 }
 
-void printbuf(char *buf, int type, const char *fmt) {
-	unsigned char ch;
-	int i;
-	switch(type) {
-		case CHAR_NUM:
-			i = 0;
-			while(1) {
-				ch = buf[i];
-				cprintf("<%x>", ch);
-				i++;
-                if (i == PGSIZE) {
-                  break;
-                }
-			}
-			break;
-		case CHAR_CHARNUM:
-			i = 0;
-			while(1) {
-				ch = buf[i];
-				if(isalph(ch)) {
-					cprintf("<%c>", ch);
-				}
-				else {
-					cprintf("<%d>", ch);
-				}
-				i++;
-                if (i == PGSIZE) {
-                  break;
-                }
-			}
-			break;
-		default:
-			cprintf("invalid type of printing buffer\n");
-			break;
-	}
-	return;
+struct message *klisten(void) {
+  struct proc *curproc = myproc();
+
+  acquire(&ptable.lock);
+
+  // queue is empty
+  if(!curproc->recv_msg_queue) {
+    // need to change state to LISTENING and call sched()
+    curproc->state = LISTENING;
+    sched();
+  }
+
+  // we are here means that someone enqueued a message while we were
+  // LISTENING OR there was already a message in the queue
+  
+  // m points to the current message to be handled
+  struct message *m = curproc->recv_msg_queue;
+  curproc->recv_msg_queue = m->next;
+  
+  curproc->recv_proc = m->src;
+
+  // make the src RUNNABLE if it is BLOCKED in ksend()
+  if(m->src->state == BLOCKED) {
+    m->src->state = RUNNABLE;
+  }
+
+  release(&ptable.lock);
+
+  return m;
+}
+
+int krply(int src_index, int dst_index, struct message *m) {
+  struct proc *src, *dst;
+
+  src = &ptable.proc[src_index];
+  dst = &ptable.proc[dst_index];
+
+  acquire(&ptable.lock);
+
+  dst->rply_msg = m;
+  if(dst->state == BLOCKED) {
+    dst->state = RUNNABLE;
+  }
+
+  src->recv_proc = 0;
+
+  release(&ptable.lock);
+  return 0;
+}
+
+struct message *krecv(void) {
+  struct proc *curproc = myproc();
+
+  acquire(&ptable.lock);
+
+  // reply yet to come
+  if(!curproc->rply_msg) {
+    // need to change state to BLOCKED and call sched()
+    curproc->state = BLOCKED;
+    sched();
+    // re acquire() lock when scheduled again
+  }
+
+  // we are here means that someone handled the request and called rply()
+  // they changed our state to RUNNABLE in krply() if we had BLOCKED
+  
+  struct message *m = curproc->rply_msg;
+  curproc->rply_msg = 0;
+  
+  release(&ptable.lock);
+
+  return m;
 }
 
 #define MAXSTRSIZE 64
-int deconstruct_msg(char *fmt, int argnum, struct message * m) {
 
+struct message *construct_msg(char *fmt, int vecnum, int argnum) {
+  // kfree() in counterpart function
+  struct message *m = (struct message *)kalloc();
+  // print to the given buffer. Only understands d, p, s, b
+  // b is a blob, which will be used when a large message payload like
+  // a file's blocks are to be sent
+  // blobs are also allocated by kalloc() and release by kfree()
+
+  m->blob = 0;
+  m->next = 0;
+  struct proc *curproc = myproc();
+  m->src = curproc;
+  char *end_ptr = (char *)m->buf;
+
+  // if this is called in krply(), then don't put vecnum and index
+  if(vecnum != -1) {
+    int *tmp = (int *)m->buf;
+    tmp[0] = vecnum;
+    tmp[1] = curproc - (struct proc *) &ptable.proc;
+    end_ptr = (char *)&tmp[2];
+  }
+
+  int bad = 0;
+
+  char c, *p, *str, *b;
+  while ((c = *fmt++) && !bad) {
+    switch (c) {
+      case 'd': case 'p': // assuming that sizeof(int) == sizeof(void *)
+        if (argint(argnum, (int *)end_ptr) < 0) {
+          bad = 1;
+        }
+        end_ptr += sizeof(int);
+        break;
+      case 's':
+        if (argstr(argnum, &str) == -1) {
+          bad = 1;
+          break;
+        }
+        while (*end_ptr++ = *str++)
+          ;
+        break;
+      case 'b':
+        if (argptr(argnum, &p, PGSIZE) < 0) { // TODO: modify/change argptr
+          bad = 1;
+          break;
+        }
+        m->blob = kalloc();
+        b = m->blob;
+        for (int i = 0; i < PGSIZE; i++) {
+          *b++ = *p++;
+        }
+        break;
+      default:
+        bad = 1;
+        break;
+    }
+    argnum++;
+  }
+
+  if (bad) {
+    if (m->blob) {
+      kfree(m->blob);
+    }
+    kfree((char *)m);
+    return 0;
+  }
+
+  return m;
+}
+
+int deconstruct_msg(char *fmt, int argnum, struct message * m) {
   char c;
   int bad = 0;
-  int *ptr;
-  char *str, *end_ptr = m->buf, *b = m->blob;
+  int *ptr = 0;
+  char *str = 0;
+  char *end_ptr = m->buf;
+  char *b = m->blob;
  
   while ((c = *fmt++) && !bad) {
     switch (c) {
@@ -435,15 +505,38 @@ int deconstruct_msg(char *fmt, int argnum, struct message * m) {
   }
 
   if (m->blob) {
+    cprintf("freeing blob in deconstruct_msg()\n");
     kfree(m->blob);
   }
+  cprintf("freeing msg in deconstruct_msg()\n");
   kfree((char *)m);
 
   return bad;
 }
 
-struct message *msg;
-int sys_recv(void) {
+// sys_ for IPC
+int sys_send(void) {
+  struct proc *curproc = myproc();
+  int dst_proc, vecnum;
+  char *fmt;
+
+  // fetch dst_proc from the user
+  if(argint(0, &dst_proc) < 0 || argint(1, &vecnum) < 0 || argstr(2, &fmt) < 0) {
+    return -1;
+  }
+  int argnum = 3;
+
+  struct message *m = construct_msg(fmt, vecnum, argnum);
+  if(!m) {
+    return -1;
+  }
+
+  return ksend(curproc - (struct proc *) &ptable.proc, dst_proc, m);
+}
+
+// sys_listen()
+int sys_listen(void) {
+  struct message *m = klisten();
   char *fmt;
 
   if(argstr(0, &fmt) < 0) {
@@ -451,8 +544,56 @@ int sys_recv(void) {
   }
   int argnum = 1;
 
-  return deconstruct_msg(fmt, argnum, msg);
+  // TODO: need to see how this deconstruct_msg() will work
+  return deconstruct_msg(fmt, argnum, m);
 }
+
+#define IMPLICIT -1
+// sys_rply()
+// rply(IMPLICIT/EXPLICIT, char *fmt, args)
+int sys_rply(void) {
+
+  struct proc *curproc = myproc();
+  int dst_proc;
+  char *fmt;
+
+  // fetch dst_proc from the user
+  if(argint(0, &dst_proc) < 0 || argstr(1, &fmt) < 0) {
+    return -1;
+  }
+
+  // use existing pointers if IMPLICIT
+  if(dst_proc == IMPLICIT) {
+    dst_proc = curproc->recv_proc - (struct proc *) &ptable.proc;
+  }
+
+  int argnum = 2;
+
+  // passing -1 so vecnum and index will not be included in the message
+  struct message *m = construct_msg(fmt, -1, argnum);
+
+  if(!m) {
+    return -1;
+  }
+
+  return krply(curproc - (struct proc *) &ptable.proc, dst_proc, m);
+}
+
+// recv() 
+// int recv(char *fmt, ...addresses of the variables where we want to store the content of buffer...);
+
+int sys_recv(void) {
+  struct message *m = krecv();
+  char *fmt;
+
+  if(argstr(0, &fmt) < 0) {
+    return -1;
+  }
+  int argnum = 1;
+
+  return deconstruct_msg(fmt, argnum, m);
+}
+
 
 int
 sys_open(void)
@@ -464,9 +605,6 @@ sys_open(void)
 
   if(argstr(0, &path) < 0 || argint(1, &omode) < 0)
     return -1;
-
-  msg = construct_msg("sd", 21, 0);
-  printbuf(msg->buf, CHAR_NUM, 0);
 
   begin_op();
 

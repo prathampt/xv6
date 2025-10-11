@@ -32,7 +32,20 @@ struct context {
   uint eip;
 };
 
-enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
+enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE, LISTENING, BLOCKED };
+
+struct message {
+    struct proc *src;
+
+    // next pointer is used to create a message queue of recieved
+    // messages in the struct proc
+    struct message *next;
+
+	char *blob;
+    // adjust the buf size so that sizeof(struct message) is
+    // equal to PGSIZE
+	char buf[PGSIZE - (sizeof(void *) * 3)];
+};
 
 // Per-process state
 struct proc {
@@ -49,6 +62,18 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  // IPC
+
+  // recv_proc will point to the process whose
+  // request is currently being handled
+  struct proc *recv_proc;
+
+  // Queue of recieved messages, manipulated by ksend()
+  struct message *recv_msg_queue;
+
+  // A single message, manipulated by rply()
+  struct message *rply_msg;
 };
 
 // Process memory is laid out contiguously, low addresses first:
