@@ -32,7 +32,7 @@ struct context {
   uint eip;
 };
 
-enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE, LISTENING, BLOCKED };
+enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, LISTENING, BLOCKED, SENDING, ZOMBIE };
 
 struct message {
     struct proc *src;

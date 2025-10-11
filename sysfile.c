@@ -313,7 +313,7 @@ int ksend(int src_index, int dst_index, struct message *m) {
     p = &(*p)->next;
   *p = m;
 
-  src->state = BLOCKED;
+  src->state = SENDING;
   sched();
   release(&ptable.lock);
   return 0;
@@ -341,7 +341,7 @@ struct message *klisten(void) {
   curproc->recv_proc = m->src;
 
   // make the src RUNNABLE if it is BLOCKED in ksend()
-  if(m->src->state == BLOCKED) {
+  if(m->src->state == SENDING) {
     m->src->state = RUNNABLE;
   }
 
@@ -379,7 +379,6 @@ struct message *krecv(void) {
     // need to change state to BLOCKED and call sched()
     curproc->state = BLOCKED;
     sched();
-    // re acquire() lock when scheduled again
   }
 
   // we are here means that someone handled the request and called rply()
@@ -505,10 +504,8 @@ int deconstruct_msg(char *fmt, int argnum, struct message * m) {
   }
 
   if (m->blob) {
-    cprintf("freeing blob in deconstruct_msg()\n");
     kfree(m->blob);
   }
-  cprintf("freeing msg in deconstruct_msg()\n");
   kfree((char *)m);
 
   return bad;

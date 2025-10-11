@@ -21,7 +21,7 @@ main(int argc, char *argv[])
     char *recvptr;
     char recvstr[64];
     int recvint;
-    recv("pbsd", &recvptr, &recvblob, &recvstr, &recvint);
+    recv("psdb", &recvptr, &recvstr, &recvint, &recvblob);
     printf(1, "parent: recieved recvptr: %p\n", recvptr);
     printf(1, "parent: recieved recvstr: %s\n", recvstr);
     printf(1, "parent: recieved recvint: %d\n", recvint);
@@ -31,6 +31,7 @@ main(int argc, char *argv[])
     }
     printf(1, "\n\n");
     wait();
+    printf(1, "code workedddddd\n-----------------------------------------------------\n\n\n");
   }
   else {
     printf(1, "child\n");
@@ -50,13 +51,11 @@ main(int argc, char *argv[])
       printf(1, "%c", listenblob[i]);
     }
     printf(1, "\n\n");
-    sleep(5);
 
     strcpy(rplyblob + 100, "arjun_pratham :)");
     int *rplyptr = rplyblob;
     // parent
-    rply(-1, "pbsd", rplyptr, rplyblob, "rply worked!!!", -17);
+    rply(-1, "psdb", rplyptr, "rply worked!!!", -17, rplyblob);
   }
-  printf(1, "code workedddddd\n");
   exit();
 }
