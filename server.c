@@ -39,7 +39,8 @@ main(int argc, char *argv[])
 	while(1) {
 
 		printf(3, "[%d] server: listening on index %d\n", uptime(), getindex());
-		listen("dddd", &vecnum, &curproc_index, &key, &value);
+		vecnum = listen();
+		extractargs("dddd", &vecnum, &curproc_index, &key, &value);
 		printf(3, "[%d] server: recieved request %d from process index %d\n", uptime(), vecnum, curproc_index); 
 		isnew = 0;
 		for(i = 0; i < numproc; i++) {

@@ -185,6 +185,7 @@ UPROGS=\
 	_testipc_main\
 	_server\
 	_client1\
+	_uptime\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)

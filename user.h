@@ -24,11 +24,12 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 int send(int, int, char *, ...);
-int listen(char *, ...);
+int listen(void);
 int rply(int, char *, ...);
 int recv(char *, ...);
 int getindex(void);
 int randomrange(int, int);
+int extractargs(char *, ...);
 
 // ulib.c
 int stat(const char*, struct stat*);

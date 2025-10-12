@@ -370,7 +370,6 @@ struct message *klisten(void) {
   
   // m points to the current message to be handled
   struct message *m = curproc->recv_msg_queue;
-  curproc->recv_msg_queue = m->next;
   
   curproc->recv_proc = m->src;
 
@@ -421,6 +420,19 @@ struct message *krecv(void) {
   struct message *m = curproc->rply_msg;
   curproc->rply_msg = 0;
   
+  release(&ptable.lock);
+
+  return m;
+}
+
+struct message *kextract(void) {
+  struct proc *curproc = myproc();
+
+  // m points to the current message to be handled
+  // dequeue the message here
+  acquire(&ptable.lock);
+  struct message *m = curproc->recv_msg_queue;
+  curproc->recv_msg_queue = m->next;
   release(&ptable.lock);
 
   return m;
@@ -545,7 +557,11 @@ int deconstruct_msg(char *fmt, int argnum, struct message * m) {
   return bad;
 }
 
-// sys_ for IPC
+#define MAXSTRSIZE 64
+
+// send() 
+// int send(int dst_proc, int vecnum, char *fmt, ...);
+
 int sys_send(void) {
   struct proc *curproc = myproc();
   int dst_proc, vecnum;
@@ -568,6 +584,12 @@ int sys_send(void) {
 // sys_listen()
 int sys_listen(void) {
   struct message *m = klisten();
+
+  // extract and return vecnum from msg->buf
+  return *((int *)m->buf);
+}
+
+int sys_extractargs(void) {
   char *fmt;
 
   if(argstr(0, &fmt) < 0) {
@@ -575,7 +597,8 @@ int sys_listen(void) {
   }
   int argnum = 1;
 
-  // TODO: need to see how this deconstruct_msg() will work
+  struct message *m = kextract();
+
   return deconstruct_msg(fmt, argnum, m);
 }
 

@@ -40,7 +40,8 @@ main(int argc, char *argv[])
     char *listenptr;
     char listenstr[64];
     int vecnum, index;
-    listen("dddspb", &vecnum, &index, &listenint, &listenstr, &listenptr, &listenblob);
+		vecnum = listen();
+    extractargs("dddspb", &vecnum, &index, &listenint, &listenstr, &listenptr, &listenblob);
     printf(1, "child: recieved vecnum: %d\n", vecnum);
     printf(1, "child: recieved index: %d\n", index);
     printf(1, "child: recieved listenptr: %p\n", listenptr);

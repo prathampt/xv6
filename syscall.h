@@ -26,3 +26,4 @@
 #define SYS_rply   25
 #define SYS_getindex 26
 #define SYS_randomrange 27
+#define SYS_extractargs 28

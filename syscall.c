@@ -109,6 +109,7 @@ extern int sys_rply(void);
 extern int sys_recv(void);
 extern int sys_getindex(void);
 extern int sys_randomrange(void);
+extern int sys_extractargs(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -138,6 +139,7 @@ static int (*syscalls[])(void) = {
 [SYS_recv]   sys_recv,
 [SYS_getindex] sys_getindex,
 [SYS_randomrange] sys_randomrange,
+[SYS_extractargs] sys_extractargs,
 };
 
 void
