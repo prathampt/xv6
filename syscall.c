@@ -107,6 +107,8 @@ extern int sys_send(void);
 extern int sys_listen(void);
 extern int sys_rply(void);
 extern int sys_recv(void);
+extern int sys_getindex(void);
+extern int sys_randomrange(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -134,6 +136,8 @@ static int (*syscalls[])(void) = {
 [SYS_listen] sys_listen,
 [SYS_rply]   sys_rply,
 [SYS_recv]   sys_recv,
+[SYS_getindex] sys_getindex,
+[SYS_randomrange] sys_randomrange,
 };
 
 void

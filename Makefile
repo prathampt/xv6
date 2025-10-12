@@ -183,6 +183,8 @@ UPROGS=\
 	_zombie\
 	_testipc\
 	_testipc_main\
+	_server\
+	_client1\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)

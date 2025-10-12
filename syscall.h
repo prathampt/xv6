@@ -24,3 +24,5 @@
 #define SYS_listen 23
 #define SYS_recv   24
 #define SYS_rply   25
+#define SYS_getindex 26
+#define SYS_randomrange 27

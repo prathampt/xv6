@@ -57,6 +57,40 @@ fdalloc(struct file *f)
   return -1;
 }
 
+// simple random number generator using cpu ticks as seed
+int sys_randomrange(void)
+{
+    int min, max;
+    uint seed;
+
+    // get syscall arguments
+    if (argint(0, &min) < 0 || argint(1, &max) < 0)
+        return -1;
+
+    if (max < min)
+        return -1;
+
+    // use system ticks as a changing seed
+    acquire(&tickslock);
+    seed = ticks;
+    release(&tickslock);
+
+    // simple linear congruential generator (LCG)
+    seed = seed * 1664525 + 1013904223;
+
+    // map to range [min, max]
+    int range = max - min + 1;
+    int result = min + (seed % range);
+
+    return result;
+}
+
+int 
+sys_getindex(void)
+{
+	return myproc() - (struct proc *) &ptable.proc;
+}
+
 int
 sys_dup(void)
 {

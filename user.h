@@ -27,6 +27,8 @@ int send(int, int, char *, ...);
 int listen(char *, ...);
 int rply(int, char *, ...);
 int recv(char *, ...);
+int getindex(void);
+int randomrange(int, int);
 
 // ulib.c
 int stat(const char*, struct stat*);
