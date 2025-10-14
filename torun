@@ -1,0 +1,14 @@
+// run the server
+$ server & 
+
+// this will print the index of the server, say it is x
+
+// optional: run the fwdserver, which will also print the index, say y
+$ fwdserver x &
+
+// now run clients that will send messages to the server index given
+// as argv[1]
+
+$ client1 x &
+$ client1 y &
+

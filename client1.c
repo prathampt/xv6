@@ -29,7 +29,6 @@ main(int argc, char *argv[])
 {
   fork();
   fork();
-  fork();
 
   int index = getindex();
   open_log(index);
@@ -42,7 +41,7 @@ main(int argc, char *argv[])
   printf(3, "[%d] client: created client at index %d\n", uptime(), index);
   send(server_index, PUT_KVAL, "dd", key, value);
 
-  printf(3, "[%d] client %d: sent message to store pair <%d, %d> to server\n", uptime(), index, key, value);
+  printf(3, "[%d] client %d: sent message to store pair <%d, %d> to server %d\n", uptime(), index, key, value, server_index);
 
   int myslot;
   int status;
@@ -51,26 +50,18 @@ main(int argc, char *argv[])
 
 
   send(server_index, GET_KVAL, "ddd", index, key, value);
-  printf(3, "[%d] client %d: sent message to get <%d, ?> to server\n", uptime(), index, key);
+  printf(3, "[%d] client %d: sent message to get <%d, ?> to server %d\n", uptime(), index, key, server_index);
   recv("dd", &status, &value);
   printf(3, "[%d] client %d: got answer <%d, ?> = <%d, %d>\n", uptime(), index, key, key, value);
 
-  /*
-  if(index == 5) {
-	  sleep(100);
-	  send(server_index, -1, "ddd", index, key, value);
-	  printf(3, "[%d] client %d: sent invalid message to server\n", uptime(),  index);
-	  recv("dd", &status, &value);
-	  printf(3, "[%d] client %d: got invalid response: %d\n", uptime(), index, status);
-  }
-  */
-
+	value = index * index + 1;
   while(1) {
-	  int sleeptime = randomrange(1, 20);
+	  // int sleeptime = randomrange(1, 150);
+		int sleeptime = 100;
 	  sleep(sleeptime);
 	  printf(3, "[%d] client %d: slept for %d\n", uptime(),  index, sleeptime);
 	  send(server_index, -1, "ddd", index, key, value);
-	  printf(3, "[%d] client %d: sent invalid message to server\n", uptime(),  index);
+	  printf(3, "[%d] client %d: sent invalid message to server %d\n", uptime(),  index, server_index);
 	  recv("dd", &status, &value);
 	  printf(3, "[%d] client %d: got invalid response: %d\n", uptime(), index, status);
   }

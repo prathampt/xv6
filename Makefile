@@ -186,6 +186,7 @@ UPROGS=\
 	_server\
 	_client1\
 	_uptime\
+	_fwdserver\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)

@@ -5,6 +5,7 @@
 
 #define IMPLICIT -1
 
+// read instructions of running the server in file "torun"
 struct key_val {
 	int index;
 	int key;
@@ -56,8 +57,8 @@ main(int argc, char *argv[])
 				printf(3, "[%d] server: created new entry for process %d at slot %d in kv_arr\n", uptime(), curproc_index, curproc);
 		}
 		else {
-				printf(3, "[%d] server: entry for process %d found at slot %d in kv_arr\n", uptime(), curproc_index, curproc);
 				curproc = i;
+				printf(3, "[%d] server: entry for process %d found at slot %d in kv_arr\n", uptime(), curproc_index, curproc);
 		}
 		switch(vecnum) {
 			case PUT_KVAL:
