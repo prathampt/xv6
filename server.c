@@ -41,7 +41,8 @@ main(int argc, char *argv[])
 
 		printf(3, "[%d] server: listening on index %d\n", uptime(), getindex());
 		vecnum = listen();
-		extractargs("dddd", &vecnum, &curproc_index, &key, &value);
+		int tmpindex;
+		extractargs("ddddd.dds", &vecnum, &curproc_index, &tmpindex, &key, &value);
 		printf(3, "[%d] server: recieved request %d from process index %d\n", uptime(), vecnum, curproc_index); 
 		isnew = 0;
 		for(i = 0; i < numproc; i++) {
@@ -65,16 +66,16 @@ main(int argc, char *argv[])
 				kv_arr[curproc].key = key;
 				kv_arr[curproc].val = value;
 				printf(3, "[%d] server: put pair <%d, %d> at slot %d\n", uptime(), key, value, curproc);
-				rply(IMPLICIT, "dd", 0, curproc);
+				rply(IMPLICIT, "dd.dds", 0, curproc);
 				break;
 			case GET_KVAL:
 				getval = kv_arr[curproc].val;
 				printf(3., "[%d] server: returning value for pair <%d, %d> at slot %d\n", uptime(), key, getval, curproc);
-				rply(IMPLICIT, "dd", 0, getval);
+				rply(IMPLICIT, "dd.dds", 0, getval);
 				break;
 			default:
 				printf(3, "[%d] server: error: invalid request number %d\n", uptime(), vecnum);
-				rply(IMPLICIT, "dd", -1, value);
+				rply(IMPLICIT, "dd.dds", -1, value);
 				break;
 		}
 	}

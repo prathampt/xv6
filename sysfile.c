@@ -440,7 +440,7 @@ struct message *kextract(void) {
 
 #define MAXSTRSIZE 64
 
-struct message *construct_msg(char *fmt, int vecnum, int argnum) {
+struct message *construct_msg(char *fmt, int vecnum, int argnum, ...) {
   // kfree() in counterpart function
   struct message *m = (struct message *)kalloc();
   // print to the given buffer. Only understands d, p, s, b
@@ -454,6 +454,8 @@ struct message *construct_msg(char *fmt, int vecnum, int argnum) {
   m->src = curproc;
   char *end_ptr = (char *)m->buf;
 
+  uint *ap;
+
   // if this is called in krply(), then don't put vecnum and index
   if(vecnum != -1) {
     int *tmp = (int *)m->buf;
@@ -465,7 +467,8 @@ struct message *construct_msg(char *fmt, int vecnum, int argnum) {
   int bad = 0;
 
   char c, *p, *str, *b;
-  while ((c = *fmt++) && !bad) {
+	int kargs = 0;
+  while (!kargs && (c = *fmt++) && !bad) {
     switch (c) {
       case 'd': case 'p': // assuming that sizeof(int) == sizeof(void *)
         if (argint(argnum, (int *)end_ptr) < 0) {
@@ -492,11 +495,34 @@ struct message *construct_msg(char *fmt, int vecnum, int argnum) {
           *b++ = *p++;
         }
         break;
+			case '.':
+				// further arguments are to be fetched from the kernel stack
+				kargs = 1;
+  			ap = (uint*)(void*)&argnum + 1;
+				break;
       default:
         bad = 1;
         break;
     }
     argnum++;
+  }
+
+  while (kargs && (c = *fmt++) && !bad) {
+    switch (c) {
+      case 'd': case 'p':
+				*(int *) end_ptr = *(int *) ap;
+        end_ptr += sizeof(int);
+        break;
+      case 's':
+				str = *ap;
+        while (*end_ptr++ = *str++)
+          ;
+        break;
+      default:
+        bad = 1;
+        break;
+    }
+		ap++;
   }
 
   if (bad) {
@@ -510,7 +536,7 @@ struct message *construct_msg(char *fmt, int vecnum, int argnum) {
   return m;
 }
 
-int deconstruct_msg(char *fmt, int argnum, struct message * m) {
+int deconstruct_msg(char *fmt, int argnum, struct message * m, ...) {
   char c;
   int bad = 0;
   int *ptr = 0;
@@ -518,7 +544,9 @@ int deconstruct_msg(char *fmt, int argnum, struct message * m) {
   char *end_ptr = m->buf;
   char *b = m->blob;
  
-  while ((c = *fmt++) && !bad) {
+	int kargs = 0;
+	uint *ap;
+  while (!kargs && (c = *fmt++) && !bad) {
     switch (c) {
       case 'd': case 'p':
         if (argptr(argnum, &ptr, sizeof(int)) < 0) {
@@ -545,8 +573,34 @@ int deconstruct_msg(char *fmt, int argnum, struct message * m) {
           *str++ = *b++;
         }
         break;
+			case '.':
+				// further arguments are to be fetched from the kernel stack
+				kargs = 1;
+  			ap = (uint*)(void*)&m + 1;
+				break;
+      default:
+        bad = 1;
+        break;
     }
     argnum++;
+  }
+
+  while (kargs && (c = *fmt++) && !bad) {
+    switch (c) {
+      case 'd': case 'p':
+				*(int *) *ap = *(int *) end_ptr;
+        end_ptr += sizeof(int);
+        break;
+      case 's':
+				str = *ap;
+        while (*str++ = *end_ptr++)
+          ;
+        break;
+      default:
+        bad = 1;
+        break;
+    }
+		ap++;
   }
 
   if (m->blob) {
@@ -573,7 +627,7 @@ int sys_send(void) {
   }
   int argnum = 3;
 
-  struct message *m = construct_msg(fmt, vecnum, argnum);
+  struct message *m = construct_msg(fmt, vecnum, argnum, 1, 2, "asdf");
   if(!m) {
     return -1;
   }
@@ -599,7 +653,11 @@ int sys_extractargs(void) {
 
   struct message *m = kextract();
 
-  return deconstruct_msg(fmt, argnum, m);
+	int one, two;
+	char str[16];
+  deconstruct_msg(fmt, argnum, m, &one, &two, str);
+	cprintf("sys_extractargs: recieved one: %d, two: %d, str: %s\n", one, two, str);
+	return ;
 }
 
 #define IMPLICIT -1
@@ -624,7 +682,7 @@ int sys_rply(void) {
   int argnum = 2;
 
   // passing -1 so vecnum and index will not be included in the message
-  struct message *m = construct_msg(fmt, -1, argnum);
+  struct message *m = construct_msg(fmt, -1, argnum, 1, 2, "asdf");
 
   if(!m) {
     return -1;
@@ -645,7 +703,11 @@ int sys_recv(void) {
   }
   int argnum = 1;
 
-  return deconstruct_msg(fmt, argnum, m);
+	int one, two;
+	char str[16];
+  deconstruct_msg(fmt, argnum, m, &one, &two, str);
+	cprintf("sys_recv: recieved one: %d, two: %d, str: %s\n", one, two, str);
+	return one;
 }
 
 

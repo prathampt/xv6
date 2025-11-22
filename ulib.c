@@ -104,3 +104,46 @@ memmove(void *vdst, const void *vsrc, int n)
     *dst++ = *src++;
   return vdst;
 }
+
+char*
+itoa(int value, char *str, int base)
+{
+  char *p = str;
+  char *p1, *p2;
+  unsigned int uvalue;
+  int digit;
+
+  // handle base range (2–36)
+  if (base < 2 || base > 36) {
+    *str = '\0';
+    return str;
+  }
+
+  // handle negative numbers only for base 10
+  if (value < 0 && base == 10) {
+    *p++ = '-';
+    uvalue = -value;
+  } else {
+    uvalue = (unsigned int)value;
+  }
+
+  // convert number to string (reverse order)
+  p1 = p;
+  do {
+    digit = uvalue % base;
+    *p++ = (digit < 10) ? '0' + digit : 'a' + digit - 10;
+    uvalue /= base;
+  } while (uvalue);
+
+  *p = '\0';
+
+  // reverse the string part after possible '-'
+  p2 = p - 1;
+  while (p1 < p2) {
+    char tmp = *p1;
+    *p1++ = *p2;
+    *p2-- = tmp;
+  }
+
+  return str;
+}

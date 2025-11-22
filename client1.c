@@ -39,19 +39,19 @@ main(int argc, char *argv[])
 
   int server_index = atoi(argv[1]);
   printf(3, "[%d] client: created client at index %d\n", uptime(), index);
-  send(server_index, PUT_KVAL, "dd", key, value);
+  send(server_index, PUT_KVAL, "ddd.dds", -1, key, value);
 
   printf(3, "[%d] client %d: sent message to store pair <%d, %d> to server %d\n", uptime(), index, key, value, server_index);
 
   int myslot;
   int status;
-  recv("dd", &status, &myslot);
+  recv("dd.dds", &status, &myslot);
   printf(3, "[%d] client %d: server returned status %d, reserved slot at %d\n", uptime(), index, status, myslot);
 
 
-  send(server_index, GET_KVAL, "ddd", index, key, value);
+  send(server_index, GET_KVAL, "ddd.dds", index, key, value);
   printf(3, "[%d] client %d: sent message to get <%d, ?> to server %d\n", uptime(), index, key, server_index);
-  recv("dd", &status, &value);
+  recv("dd.dds", &status, &value);
   printf(3, "[%d] client %d: got answer <%d, ?> = <%d, %d>\n", uptime(), index, key, key, value);
 
 	value = index * index + 1;
@@ -60,9 +60,9 @@ main(int argc, char *argv[])
 		int sleeptime = 100;
 	  sleep(sleeptime);
 	  printf(3, "[%d] client %d: slept for %d\n", uptime(),  index, sleeptime);
-	  send(server_index, -1, "ddd", index, key, value);
+	  send(server_index, -2, "ddd.dds", index, key, value);
 	  printf(3, "[%d] client %d: sent invalid message to server %d\n", uptime(),  index, server_index);
-	  recv("dd", &status, &value);
+	  recv("dd.dds", &status, &value);
 	  printf(3, "[%d] client %d: got invalid response: %d\n", uptime(), index, status);
   }
   exit();
