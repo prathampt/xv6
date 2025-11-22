@@ -70,7 +70,8 @@ struct proc {
   struct proc *recv_proc;
 
   // Queue of recieved messages, manipulated by ksend()
-  struct message *recv_msg_queue;
+  struct message *recv_msg_queue_head;
+  struct message *recv_msg_queue_tail;
 
   // A single message, manipulated by rply()
   struct message *rply_msg;

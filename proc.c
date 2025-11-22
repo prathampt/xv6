@@ -115,7 +115,8 @@ found:
   p->recv_proc = 0;
 
   // Queue of recieved messages, manipulated by ksend()
-  p->recv_msg_queue = 0;
+  p->recv_msg_queue_head = 0;
+  p->recv_msg_queue_tail = 0;
 
   // A single message, manipulated by rply()
   p->rply_msg = 0;

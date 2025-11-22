@@ -333,19 +333,16 @@ int ksend(int src_index, int dst_index, struct message *m) {
   // check if the destination is LISTENING
   // this also implies that the queue of recieved messages is empty :)
   if(dst->state == LISTENING) {
-    dst->recv_msg_queue = m;
+    dst->recv_msg_queue_head = m;
+    dst->recv_msg_queue_tail = m;
     // can handle request immediately
     dst->state = RUNNABLE;
     release(&ptable.lock);
     return 0;
   }
-  // need to append to the queue, dst is busy
-  struct message **p = &dst->recv_msg_queue;
 
-  // good taste in code :)
-  while(*p)
-    p = &(*p)->next;
-  *p = m;
+  dst->recv_msg_queue_tail->next = m;
+  dst->recv_msg_queue_tail = m;
 
   src->state = SENDING;
   sched();
@@ -359,7 +356,7 @@ struct message *klisten(void) {
   acquire(&ptable.lock);
 
   // queue is empty
-  if(!curproc->recv_msg_queue) {
+  if(!curproc->recv_msg_queue_head) {
     // need to change state to LISTENING and call sched()
     curproc->state = LISTENING;
     sched();
@@ -369,7 +366,7 @@ struct message *klisten(void) {
   // LISTENING OR there was already a message in the queue
   
   // m points to the current message to be handled
-  struct message *m = curproc->recv_msg_queue;
+  struct message *m = curproc->recv_msg_queue_head;
   
   curproc->recv_proc = m->src;
 
@@ -431,8 +428,10 @@ struct message *kextract(void) {
   // m points to the current message to be handled
   // dequeue the message here
   acquire(&ptable.lock);
-  struct message *m = curproc->recv_msg_queue;
-  curproc->recv_msg_queue = m->next;
+  struct message *m = curproc->recv_msg_queue_head;
+  curproc->recv_msg_queue_head = m->next;
+  if(!curproc->recv_msg_queue_head)
+    curproc->recv_msg_queue_tail = 0;
   release(&ptable.lock);
 
   return m;
