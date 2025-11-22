@@ -27,3 +27,4 @@
 #define SYS_getindex 26
 #define SYS_randomrange 27
 #define SYS_extractargs 28
+#define SYS_clone 29

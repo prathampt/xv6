@@ -88,6 +88,7 @@ extern int sys_dup(void);
 extern int sys_exec(void);
 extern int sys_exit(void);
 extern int sys_fork(void);
+extern int sys_clone(void);
 extern int sys_fstat(void);
 extern int sys_getpid(void);
 extern int sys_kill(void);
@@ -140,6 +141,7 @@ static int (*syscalls[])(void) = {
 [SYS_getindex] sys_getindex,
 [SYS_randomrange] sys_randomrange,
 [SYS_extractargs] sys_extractargs,
+[SYS_clone] sys_clone,
 };
 
 void

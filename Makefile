@@ -188,6 +188,7 @@ UPROGS=\
 	_uptime\
 	_fwdserver\
 	_mailserver\
+	_test_clone\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)

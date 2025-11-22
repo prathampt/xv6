@@ -14,6 +14,12 @@ sys_fork(void)
 }
 
 int
+sys_clone(void)
+{
+  return clone();
+}
+
+  int
 sys_exit(void)
 {
   exit();
