@@ -63,6 +63,10 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
 
+  // shared memory for clone()
+  int shared;
+  uint sharedsz;
+
   // IPC
 
   // recv_proc will point to the process whose

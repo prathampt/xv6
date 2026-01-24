@@ -19,6 +19,8 @@ exec(char *path, char **argv)
   pde_t *pgdir, *oldpgdir;
   struct proc *curproc = myproc();
 
+  int shared, sharedsz = 0;
+
   begin_op();
 
   if((ip = namei(path)) == 0){
@@ -63,8 +65,10 @@ exec(char *path, char **argv)
   // Allocate two pages at the next page boundary.
   // Make the first inaccessible.  Use the second as the user stack.
   sz = PGROUNDUP(sz);
-  if((sz = allocuvm(pgdir, sz, sz + 2*PGSIZE)) == 0)
+  if((sz = allocuvm(pgdir, sz, sz + 2*PGSIZE)) == 0) {
+    sharedsz = sz - PGSIZE;
     goto bad;
+  }
   clearpteu(pgdir, (char*)(sz - 2*PGSIZE));
   sp = sz;
 
@@ -94,18 +98,22 @@ exec(char *path, char **argv)
   safestrcpy(curproc->name, last, sizeof(curproc->name));
 
   // Commit to the user image.
+  shared = curproc->shared;
   oldpgdir = curproc->pgdir;
   curproc->pgdir = pgdir;
   curproc->sz = sz;
   curproc->tf->eip = elf.entry;  // main
   curproc->tf->esp = sp;
+  curproc->sharedsz = sz - PGSIZE;
   switchuvm(curproc);
-  freevm(oldpgdir);
+  // freevm(oldpgdir);
+  freevm(oldpgdir, shared ? curproc->sharedsz : 0);
   return 0;
 
  bad:
   if(pgdir)
-    freevm(pgdir);
+    // freevm(pgdir);
+    freevm(pgdir, sharedsz);
   if(ip){
     iunlockput(ip);
     end_op();
