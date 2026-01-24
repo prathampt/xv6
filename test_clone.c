@@ -70,9 +70,10 @@ struct global {
   struct uspinlock lk;
   int tmp;
   char arr[16];
+  char buf[4];
+  char *childbuf;
 } global;
 
-char *buf;
 
 int
 newfunc(void)
@@ -81,11 +82,15 @@ newfunc(void)
   printf(1, "I am new function and if you are seeing this then the clone is working!!! :)\n");
   uacquire(&global.lk);
   printf(1, "Child acquired the lock\n");
-  printf(1, "child: arr[0]: %c, tmp: %d, buf[0]: %c\n", global.arr[0], global.tmp, buf[0]);
+  printf(1, "child: arr[0]: %c, tmp: %d, buf[0]: %c\n", global.arr[0], global.tmp, global.buf[0]);
   global.arr[0] = 'b';
   global.tmp = 87;
-  buf[0] = 'q';
-  printf(1, "child: arr[0]: %c, tmp: %d, buf[0]: %c\n", global.arr[0], global.tmp, buf[0]);
+  global.buf[0] = 'q';
+
+  global.childbuf = (char *) malloc(1);
+  global.childbuf[0] = 'z';
+  printf(1, "printing in child: %c\n", global.childbuf[0]);
+  printf(1, "child: arr[0]: %c, tmp: %d, buf[0]: %c\n", global.arr[0], global.tmp, global.buf[0]);
   urelease(&global.lk);
   printf(1, "Child released lock\n");
   exit();
@@ -99,9 +104,9 @@ main(int argc, char *argv[])
   global.arr[0] = 'a';
   global.tmp = 42;
 
-  buf = (char *) malloc(128);
-  buf[0] = 'p';
-  printf(1, "arr[0]: %c, tmp: %d, buf[0]: %c\n", global.arr[0], global.tmp, buf[0]);
+  // global.buf = (char *) malloc(128);
+  global.buf[0] = 'p';
+  printf(1, "arr[0]: %c, tmp: %d, buf[0]: %c\n", global.arr[0], global.tmp, global.buf[0]);
   printf(1, "parent pid: %d\n", getpid());
   // int pid = fork();
   int pid = clone(newfunc);
@@ -127,11 +132,14 @@ main(int argc, char *argv[])
     sleep(5);
     uacquire(&global.lk);
     printf(1, "Parent acquired the lock\n");
-    printf(1, "arr[0]: %c, tmp: %d, buf[0]: %c\n", global.arr[0], global.tmp, buf[0]);
+    printf(1, "arr[0]: %c, tmp: %d, buf[0]: %c\n", global.arr[0], global.tmp, global.buf[0]);
+    printf(1, "childbuf: %p\n", global.childbuf);
     urelease(&global.lk);
   }
 
   wait();
+  printf(1, "dereferencing childbuf: should give segfault\n");
+  printf(1, "printing in parent: %c\n", global.childbuf[0]);
   printf(1, "I the old function: I should be printed only once !!! :)\n");
   exit();
 }

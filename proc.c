@@ -261,6 +261,7 @@ fork(void)
     return -1;
   }
   np->sz = curproc->sz;
+  np->sharedsz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
 
