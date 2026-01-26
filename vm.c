@@ -114,24 +114,32 @@ static struct kmap {
  { (void*)DEVSPACE, DEVSPACE,      0,         PTE_W}, // more devices
 };
 
+int firstsetup = 1;
 // Set up kernel part of a page table.
 pde_t*
 setupkvm(void)
 {
   pde_t *pgdir;
   struct kmap *k;
-
+  
   if((pgdir = (pde_t*)kalloc()) == 0)
     return 0;
   memset(pgdir, 0, PGSIZE);
-  if (P2V(PHYSTOP) > (void*)DEVSPACE)
-    panic("PHYSTOP too high");
-  for(k = kmap; k < &kmap[NELEM(kmap)]; k++)
-    if(mappages(pgdir, k->virt, k->phys_end - k->phys_start,
-                (uint)k->phys_start, k->perm) < 0) {
-      freevm(pgdir);
-      return 0;
-    }
+
+  if(firstsetup) {
+    firstsetup = 0;
+    if (P2V(PHYSTOP) > (void*)DEVSPACE)
+      panic("PHYSTOP too high");
+    for(k = kmap; k < &kmap[NELEM(kmap)]; k++)
+      if(mappages(pgdir, k->virt, k->phys_end - k->phys_start,
+            (uint)k->phys_start, k->perm) < 0) {
+        freevm(pgdir);
+        return 0;
+      }
+  }
+  else {
+    memmove(pgdir, kpgdir, PGSIZE);
+  }
   return pgdir;
 }
 
@@ -288,7 +296,7 @@ freevm(pde_t *pgdir)
   if(pgdir == 0)
     panic("freevm: no pgdir");
   deallocuvm(pgdir, KERNBASE, 0);
-  for(i = 0; i < NPDENTRIES; i++){
+  for(i = 0; i < NPDENTRIES/2; i++){
     if(pgdir[i] & PTE_P){
       char * v = P2V(PTE_ADDR(pgdir[i]));
       kfree(v);
