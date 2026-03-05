@@ -7,10 +7,12 @@
 #include "syscall.h"
 #include "traps.h"
 #include "memlayout.h"
+#include "test.h"
 
 char buf[8192];
 char name[3];
 char *echoargv[] = { "echo", "ALL", "TESTS", "PASSED", 0 };
+char *argv_shutdown[] = { "shutdown", 0 };
 int stdout = 1;
 
 // does chdir() call iput(p->cwd) in a transaction?
@@ -1745,6 +1747,21 @@ rand()
   return randstate;
 }
 
+// function used for automated testing
+void
+printtime(char *testname)
+{
+  if(TESTING) {
+    static int uptime0 = 0;
+    int uptime1 = uptime();
+    // don't print the first time
+    if(uptime0) {
+      printf(1, "[TEST] %s: %d\n", testname, uptime1 - uptime0);
+    }
+    uptime0 = uptime1;
+  }
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -1756,48 +1773,94 @@ main(int argc, char *argv[])
   }
   close(open("usertests.ran", O_CREATE));
 
+  int uptime0 = uptime();
+  // initialise the time variable in printtime()
+  printtime("");
   argptest();
+  printtime("argptest");
   createdelete();
+  printtime("createdelete");
   linkunlink();
+  printtime("linkunlink");
   concreate();
+  printtime("concreate");
   fourfiles();
+  printtime("fourfiles");
   sharedfd();
+  printtime("sharedfd");
 
   bigargtest();
+  printtime("bigargtest");
   bigwrite();
+  printtime("bigwrite");
   bigargtest();
+  printtime("bigargtest");
   bsstest();
+  printtime("bsstest");
   sbrktest();
+  printtime("sbrktest");
   validatetest();
+  printtime("validatetest");
 
   opentest();
+  printtime("opentest");
   writetest();
+  printtime("writetest");
   writetest1();
+  printtime("writetest1");
   createtest();
+  printtime("createtest");
 
   openiputtest();
+  printtime("openiputtest");
   exitiputtest();
+  printtime("exitiputtest");
   iputtest();
+  printtime("iputtest");
 
   mem();
+  printtime("mem");
   pipe1();
+  printtime("pipe1");
   preempt();
+  printtime("preempt");
   exitwait();
+  printtime("exitwait");
 
   rmdot();
+  printtime("rmdot");
   fourteen();
+  printtime("fourteen");
   bigfile();
+  printtime("bigfile");
   subdir();
+  printtime("subdir");
   linktest();
+  printtime("linktest");
   unlinkread();
+  printtime("unlinkread");
   dirfile();
+  printtime("dirfile");
   iref();
+  printtime("iref");
   forktest();
+  printtime("forktest");
   bigdir(); // slow
+  printtime("bigdir");
 
   uio();
+  printtime("uio");
 
-  exectest();
+  if(fork() == 0)
+    exectest();
+  wait();
 
+  if(TESTING) {
+    printf(1, "[TEST] Total Time: %d\n", uptime() - uptime0);
+    exec("shutdown", argv_shutdown);exit();
+  }
+  else {
+    printf(1, "Total Time: %d\n", uptime() - uptime0);
+  }
   exit();
 }

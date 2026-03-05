@@ -14,6 +14,7 @@
 #include "mmu.h"
 #include "proc.h"
 #include "x86.h"
+#include "test.h"
 
 static void consputc(int);
 
@@ -118,6 +119,11 @@ panic(char *s)
   getcallerpcs(&s, pcs);
   for(i=0; i<10; i++)
     cprintf(" %p", pcs[i]);
+  if(TESTING) {
+    // in case of automated testing, just shutdown after the panic
+    cprintf(TESTING_PANICMSG);
+    outw(0x604, 0x0 | 0x2000);
+  }
   panicked = 1; // freeze other CPU
   for(;;)
     ;
