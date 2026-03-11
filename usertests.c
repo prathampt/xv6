@@ -1756,6 +1756,8 @@ main(int argc, char *argv[])
   }
   close(open("usertests.ran", O_CREATE));
 
+  int uptime0 = uptime();
+
   argptest();
   createdelete();
   linkunlink();
@@ -1796,6 +1798,8 @@ main(int argc, char *argv[])
   bigdir(); // slow
 
   uio();
+
+  printf(1, "Total time: %d\n", uptime() - uptime0);
 
   exectest();
 

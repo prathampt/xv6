@@ -78,8 +78,9 @@ spin:
 # Bootstrap GDT
 .p2align 2                                # force 4 byte alignment
 gdt:
-  SEG_NULLASM                             # null seg
-  SEG_ASM(STA_X|STA_R, 0x0, 0xffffffff)   # code seg
+  SEG_NULLASM # null seg
+  SEG_NULLASM # c.f. grub-core/lib/i386/relocator32.S: reserved
+  SEG_ASM(STA_X|STA_R, 0x0 , 0xffffffff ) # code seg
   SEG_ASM(STA_W, 0x0, 0xffffffff)         # data seg
 
 gdtdesc:

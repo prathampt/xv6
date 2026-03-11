@@ -89,3 +89,10 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+int
+sys_poweroff(void)
+{
+  outb(0x92, 0x01);
+  return 0;
+}
