@@ -1724,7 +1724,8 @@ uio()
   printf(1, "uio test done\n");
 }
 
-void argptest()
+int
+argptest()
 {
   int fd;
   fd = open("init", O_RDONLY);

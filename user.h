@@ -1,3 +1,6 @@
+// number of elements in fixed-size array
+#define NELEM(x) (sizeof(x)/sizeof((x)[0]))
+
 struct stat;
 struct rtcdate;
 
@@ -24,6 +27,7 @@ char* sbrk(int);
 int sleep(int);
 int uptime(void);
 int poweroff(void);
+int dopanic(char *msg);
 
 // ulib.c
 int stat(const char*, struct stat*);

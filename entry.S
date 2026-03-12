@@ -38,8 +38,8 @@ multiboot_header:
 # Since we haven't set up virtual memory yet, our entry point is
 # the physical address of 'entry'.
 .globl _start
-# _start = V2P_WO(entry)
-_start = entry
+_start = V2P_WO(entry)
+# for real hwardware: _start = entry
 
 # Entering xv6 on boot processor, with paging off.
 .globl entry

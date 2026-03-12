@@ -6,6 +6,7 @@
 #include "fcntl.h"
 
 char *argv[] = { "sh", 0 };
+char *stress_argv[] = { "realstress", 0 };
 
 int
 main(void)
@@ -27,11 +28,13 @@ main(void)
       exit();
     }
     if(pid == 0){
-      exec("sh", argv);
+      // exec("sh", argv);
+      exec("realstress", stress_argv);
       printf(1, "init: exec sh failed\n");
       exit();
     }
     while((wpid=wait()) >= 0 && wpid != pid)
       printf(1, "zombie!\n");
+    dopanic("stressfs failed\n");
   }
 }

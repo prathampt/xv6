@@ -8,6 +8,16 @@
 #include "proc.h"
 
 int
+sys_dopanic(void)
+{
+  char *msg;
+  if(argstr(0, &msg) < 0)
+    return -1;
+  panic(msg);
+  return 0;
+}
+
+int
 sys_fork(void)
 {
   return fork();
@@ -93,6 +103,9 @@ sys_uptime(void)
 int
 sys_poweroff(void)
 {
-  outb(0x92, 0x01);
+  // shutdown
+  outw(0x604, 0x0 | 0x2000);
+
+  // reboot on real hardware: outb(0x92, 0x01);
   return 0;
 }
