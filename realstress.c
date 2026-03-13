@@ -288,6 +288,10 @@ sharedfd2(int fd, int seed)
   }
 }
 
+//
+// Module 3
+//
+
 // four processes write different files at the same
 // time, to test block allocation.
 int
@@ -459,6 +463,31 @@ concreate(int seed)
       exit();
     else
       wait();
+  }
+  return 0;
+}
+
+// try to find any races between exit and wait
+int
+exitwait(int seed)
+{
+  int i, pid;
+  printf(1, "%d\n", seed);
+
+  for(i = 0; i < 100; i++){
+    pid = fork();
+    if(pid < 0){
+      printf(1, "fork failed\n");
+      return 1;
+    }
+    if(pid){
+      if(wait() != pid){
+        printf(1, "wait wrong pid\n");
+        return 1;
+      }
+    } else {
+      exit();
+    }
   }
   return 0;
 }
@@ -784,6 +813,7 @@ int (*module_2[])(int, int) = {
 int (*module_3[])(int) = {
   [0] concreate,
   [1] fourfiles,
+  [2] exitwait,
 };
 
 //
@@ -1020,11 +1050,256 @@ iputtest(void)
   return 0;
 }
 
+//
+// Module 6
+//
+
+int
+mem(int seed)
+{
+  void *m1, *m2;
+  int pid, ppid;
+
+  printf(1, "%d\n", seed);
+  ppid = getpid();
+  if((pid = fork()) == 0){
+    m1 = 0;
+    while((m2 = malloc(10001)) != 0){
+      *(char**)m2 = m1;
+      m1 = m2;
+    }
+    while(m1){
+      m2 = *(char**)m1;
+      free(m1);
+      m1 = m2;
+    }
+    m1 = malloc(1024*5);
+    if(m1 == 0){
+      printf(1, "couldn't allocate mem?!!\n");
+      kill(ppid);
+      return 1;
+    }
+    free(m1);
+    exit();
+  } else {
+    wait();
+  }
+  return 0;
+}
+
+// simple fork and pipe read/write
+
+int
+pipe1(int seed)
+{
+  int fds[2], pid;
+  int seq, i = 1, n, cc, total;
+
+  printf(1, "%d\n", seed);
+  while(pipe(fds) != 0) {
+    printf(1, "pipe fail count: %d seed: %d\n", i++, seed);
+  }
+  pid = fork();
+  seq = 0;
+  if(pid == 0){
+    close(fds[0]);
+    for(n = 0; n < 5; n++){
+      for(i = 0; i < 1033; i++)
+        buf[i] = seq++;
+      if(write(fds[1], buf, 1033) != 1033){
+        printf(1, "pipe1 oops 1\n");
+        return 1;
+      }
+    }
+    exit();
+  } else if(pid > 0){
+    close(fds[1]);
+    total = 0;
+    cc = 1;
+    while((n = read(fds[0], buf, cc)) > 0){
+      for(i = 0; i < n; i++){
+        if((buf[i] & 0xff) != (seq++ & 0xff)){
+          printf(1, "pipe1 oops 2\n");
+          return 1;
+        }
+      }
+      total += n;
+      cc = cc * 2;
+      if(cc > sizeof(buf))
+        cc = sizeof(buf);
+    }
+    if(total != 5 * 1033){
+      printf(1, "pipe1 oops 3 total %d\n", total);
+      return 1;
+    }
+    close(fds[0]);
+    wait();
+  } else {
+    printf(1, "fork() failed\n");
+    return 1;
+  }
+  return 0;
+}
+
+int
+preempt(int seed)
+{
+  int pid1, pid2, pid3, i = 1;
+  int pid11, pid22, pid33;
+  int pfds[2], pfds2[2];
+
+  printf(1, "%d\n", seed);
+  pid1 = fork();
+  if(pid1 == 0)
+    for(;;)
+      ;
+
+  pid11 = fork();
+  if(pid11 == 0)
+    for(;;)
+      ;
+
+  pid2 = fork();
+  if(pid2 == 0)
+    for(;;)
+      ;
+
+  pid22 = fork();
+  if(pid22 == 0)
+    for(;;)
+      ;
+
+  while(pipe(pfds) != 0) {
+    printf(1, "pipe fail count: %d seed: %d\n", i++, seed);
+  }
+  pid3 = fork();
+  if(pid3 == 0){
+    close(pfds[0]);
+    if(write(pfds[1], "x", 1) != 1)
+      printf(1, "preempt write error");
+    close(pfds[1]);
+    for(;;)
+      ;
+  }
+
+  while(pipe(pfds2) != 0) {
+    printf(1, "pipe fail count: %d seed: %d\n", i++, seed);
+  }
+  pid33 = fork();
+  if(pid33 == 0){
+    close(pfds2[0]);
+    if(write(pfds2[1], "x", 1) != 1)
+      printf(1, "preempt write error");
+    close(pfds2[1]);
+    for(;;)
+      ;
+  }
+
+  close(pfds[1]);
+  while(read(pfds[0], buf, sizeof(buf)) != 1)
+    ;
+  close(pfds[0]);
+
+  close(pfds2[1]);
+  while(read(pfds2[0], buf, sizeof(buf)) != 1)
+    ;
+  close(pfds2[0]);
+
+  kill(pid1);
+  kill(pid2);
+  kill(pid3);
+  kill(pid11);
+  kill(pid22);
+  kill(pid33);
+  wait();
+  wait();
+  wait();
+  wait();
+  wait();
+  wait();
+  return 0;
+}
+
+
+// test that fork fails gracefully
+// the forktest binary also does this, but it runs out of proc entries first.
+// inside the bigger usertests binary, we run out of memory first.
+int
+forktest(int seed)
+{
+  int n, pid;
+
+  printf(1, "%d\n", seed);
+  for(n=0; n<1000; n++){
+    pid = fork();
+    if(pid < 0)
+      break;
+    if(pid == 0)
+      exit();
+  }
+
+  if(n == 1000){
+    printf(1, "fork claimed to work 1000 times!\n");
+    return 1;
+  }
+
+  for(; n > 0; n--){
+    if(wait() < 0){
+      printf(1, "wait stopped early\n");
+      return 1;
+    }
+  }
+
+  if(wait() != -1){
+    printf(1, "wait got too many\n");
+    return 1;
+  }
+
+  return 0;
+}
+
+int
+uio(int seed)
+{
+  #define RTC_ADDR 0x70
+  #define RTC_DATA 0x71
+
+  ushort port = 0;
+  uchar val = 0;
+  int pid;
+
+  printf(1, "%d\n", seed);
+  pid = fork();
+  if(pid == 0){
+    port = RTC_ADDR;
+    val = 0x09;  /* year */
+    /* http://wiki.osdev.org/Inline_Assembly/Examples */
+    asm volatile("outb %0,%1"::"a"(val), "d" (port));
+    port = RTC_DATA;
+    asm volatile("inb %1,%0" : "=a" (val) : "d" (port));
+    printf(1, "uio: uio succeeded; test FAILED\n");
+    return 1;
+  } else if(pid < 0){
+    printf (1, "fork failed\n");
+    return 1;
+  }
+  wait();
+  return 0;
+}
+
 int (*module_5[])(int) = {
   [0] opentest,
   [1] writetest,
   [2] writetest1,
   [3] createtest,
+  [4] mem,
+};
+
+int (*module_6[])(int) = {
+  [0] pipe1,
+  [1] preempt,
+  [2] uio,
+  [3] forktest,
 };
 
 void
@@ -1158,6 +1433,29 @@ module5(void)
   printf(1, "module 5 time: %d\n", uptime() - uptime0);
 }
 
+void
+module6(void)
+{
+  int uptime0 = uptime();
+  printf(1, "module 6 started\n");
+  int ret, i;
+  for(i = 0; i < NELEM(module_6)*NTHREADS; i++) {
+    if(fork() == 0) {
+      ret = module_6[i/NTHREADS](i%NTHREADS);
+      if(ret) {
+        dopanic("TEST FAILED\n");
+      }
+      exit();
+    }
+  }
+  // wait for all children
+  for(i = 0; i < NELEM(module_6)*NTHREADS; i++) {
+    wait();
+  }
+  printf(1, "module 6 passed\n");
+  printf(1, "module 6 time: %d\n", uptime() - uptime0);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -1177,11 +1475,14 @@ main(int argc, char *argv[])
 
   int uptime0 = uptime();
 
+  /*
   module1();
   module2();
   module3();
   module4();
   module5();
+  */
+  module6();
   printf(1, "Total time: %d\n", uptime() - uptime0);
 
   exec("shutdown", shutdown_argv);
