@@ -183,6 +183,8 @@ UPROGS=\
 	_zombie\
 	_shutdown\
 	_realstress\
+	_realstress1\
+	_realstress2\
 
 fs.img: mkfs README $(UPROGS)
 	./mkfs fs.img README $(UPROGS)
