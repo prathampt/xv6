@@ -786,6 +786,247 @@ int (*module_3[])(int) = {
   [1] fourfiles,
 };
 
+//
+// Module 5
+//
+
+int
+opentest(int seed)
+{
+  int fd;
+  printf(1, "%d\n", seed);
+  fd = open("echo", 0);
+  if(fd < 0){
+    printf(1, "open echo failed!\n");
+    return 1;
+  }
+  close(fd);
+  fd = open("doesnotexist", 0);
+  if(fd >= 0){
+    printf(1, "open doesnotexist succeeded!\n");
+    return 1;
+  }
+  return 0;
+}
+
+int
+writetest(int seed)
+{
+  int fd;
+  int i;
+  printf(1, "%d\n", seed);
+
+  fd = open("small", O_CREATE|O_RDWR);
+  if(fd < 0){
+    printf(1, "error: creat small failed!\n");
+    return 1;
+  }
+  for(i = 0; i < 100; i++){
+    if(write(fd, "aaaaaaaaaa", 10) != 10){
+      printf(1, "error: write aa %d new file failed\n", i);
+      return 1;
+    }
+    if(write(fd, "bbbbbbbbbb", 10) != 10){
+      printf(1, "error: write bb %d new file failed\n", i);
+      return 1;
+    }
+  }
+  close(fd);
+  fd = open("small", O_RDONLY);
+  if(fd < 0){
+    printf(1, "error: open small failed!\n");
+    return 1;
+  }
+  i = read(fd, buf, 2000);
+  if(i != 2000){
+    printf(1, "read failed\n");
+    return 1;
+  }
+  close(fd);
+
+  return 0;
+}
+
+char buf[8192];
+
+int
+writetest1(int seed)
+{
+  int i, fd, n;
+  printf(1, "%d\n", seed);
+  char filename[5];
+  filename[0] = 'b';
+  filename[1] = 'i';
+  filename[2] = 'g';
+  filename[3] = 'w' + seed % 26;
+  filename[4] = 0;
+
+  fd = open(filename, O_CREATE|O_RDWR);
+  if(fd < 0){
+    printf(1, "error: creat big failed!\n");
+    return 1;
+  }
+
+  for(i = 0; i < MAXFILE; i++){
+    ((int*)buf)[0] = i;
+    if(write(fd, buf, 512) != 512){
+      printf(1, "error: write big file failed\n", i);
+      return 1;
+    }
+  }
+
+  close(fd);
+
+  fd = open(filename, O_RDONLY);
+  if(fd < 0){
+    printf(1, "error: open big failed!\n");
+    return 1;
+  }
+
+  n = 0;
+  for(;;){
+    i = read(fd, buf, 512);
+    if(i == 0){
+      if(n == MAXFILE - 1){
+        printf(1, "read only %d blocks from big", n);
+        return 1;
+      }
+      break;
+    } else if(i != 512){
+      printf(1, "read failed %d\n", i);
+      return 1;
+    }
+    if(((int*)buf)[0] != n){
+      printf(1, "read content of block %d is %d\n",
+             n, ((int*)buf)[0]);
+      return 1;
+    }
+    n++;
+  }
+  close(fd);
+  if(unlink(filename) < 0){
+    printf(1, "unlink big failed\n");
+    return 1;
+  }
+  return 0;
+}
+
+int
+createtest(int seed)
+{
+  int i, fd;
+  printf(1, "%d\n", seed);
+  char name[4];
+
+  name[0] = 'a' + seed % 26;
+  name[2] = 'c';
+  name[3] = 0;
+  for(i = 0; i < 40; i++){
+    name[1] = '0' + i;
+    fd = open(name, O_CREATE|O_RDWR);
+    close(fd);
+  }
+  name[0] = 'a' + seed % 26;
+  name[2] = 'c';
+  name[3] = 0;
+  for(i = 0; i < 40; i++){
+    name[1] = '0' + i;
+    unlink(name);
+  }
+  return 0;
+}
+
+int
+openiputtest(void)
+{
+  int pid;
+
+  if(mkdir("oidir") < 0){
+    printf(1, "mkdir oidir failed\n");
+    return 1;
+  }
+  pid = fork();
+  if(pid < 0){
+    printf(1, "fork failed\n");
+    return 1;
+  }
+  if(pid == 0){
+    int fd = open("oidir", O_RDWR);
+    if(fd >= 0){
+      printf(1, "open directory for write succeeded\n");
+      return 1;
+    }
+    exit();
+  }
+  sleep(1);
+  if(unlink("oidir") != 0){
+    printf(1, "unlink failed\n");
+    return 1;
+  }
+  wait();
+  return 0;
+}
+
+// does exit() call iput(p->cwd) in a transaction?
+int
+exitiputtest(void)
+{
+  int pid;
+
+  pid = fork();
+  if(pid < 0){
+    printf(1, "fork failed\n");
+    return 1;
+  }
+  if(pid == 0){
+    if(mkdir("eiputdir") < 0){
+      printf(1, "mkdir failed\n");
+      return 1;
+    }
+    if(chdir("eiputdir") < 0){
+      printf(1, "child chdir failed\n");
+      return 1;
+    }
+    if(unlink("../eiputdir") < 0){
+      printf(1, "unlink ../eiputdir failed\n");
+      return 1;
+    }
+    exit();
+  }
+  wait();
+  return 0;
+}
+
+// does chdir() call iput(p->cwd) in a transaction?
+int
+iputtest(void)
+{
+  if(mkdir("iputdir") < 0){
+    printf(1, "mkdir failed\n");
+    return 1;
+  }
+  if(chdir("iputdir") < 0){
+    printf(1, "chdir iputdir failed\n");
+    return 1;
+  }
+  if(unlink("../iputdir") < 0){
+    printf(1, "unlink ../iputdir failed\n");
+    return 1;
+  }
+  if(chdir("/") < 0){
+    printf(1, "chdir / failed\n");
+    return 1;
+  }
+  return 0;
+}
+
+int (*module_5[])(int) = {
+  [0] opentest,
+  [1] writetest,
+  [2] writetest1,
+  [3] createtest,
+};
+
 void
 module1(void)
 {
@@ -863,6 +1104,60 @@ module3(void)
   printf(1, "module 3 time: %d\n", uptime() - uptime0);
 }
 
+void
+module5(void)
+{
+  int uptime0 = uptime();
+  printf(1, "module 5 started\n");
+  int ret, i;
+  for(i = 0; i < NELEM(module_5)*NTHREADS; i++) {
+    if(fork() == 0) {
+      ret = module_5[i/NTHREADS](i%NTHREADS);
+      if(ret) {
+        dopanic("TEST FAILED\n");
+      }
+      exit();
+    }
+  }
+  // wait for all children
+  for(i = 0; i < NELEM(module_5)*NTHREADS; i++) {
+    wait();
+  }
+  unlink("small");
+
+  for(i = 0; i < 3; i++) {
+    if(fork() == 0) {
+      switch(i) {
+        case 0:
+          if(openiputtest()) {
+            dopanic("TEST FAILED\n");
+          }
+          exit();
+          break;
+        case 1:
+          if(exitiputtest()) {
+            dopanic("TEST FAILED\n");
+          }
+          exit();
+          break;
+        case 2:
+          if(iputtest()) {
+            dopanic("TEST FAILED\n");
+          }
+          exit();
+          break;
+        default:
+          break;
+      }
+    }
+  }
+  for(i = 0; i < 3; i++) {
+    wait();
+  }
+  printf(1, "module 5 passed\n");
+  printf(1, "module 5 time: %d\n", uptime() - uptime0);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -886,6 +1181,7 @@ main(int argc, char *argv[])
   module2();
   module3();
   module4();
+  module5();
   printf(1, "Total time: %d\n", uptime() - uptime0);
 
   exec("shutdown", shutdown_argv);
