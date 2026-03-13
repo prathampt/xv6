@@ -29,8 +29,6 @@ createdelete(int seed)
   char name[32];
   name[0] = first;
 
-  // printf(1, "createdelete test\n");
-
   for(pi = 0; pi < 4; pi++){
     pid = fork();
     if(pid < 0){
@@ -78,8 +76,10 @@ createdelete(int seed)
         printf(1, "oops createdelete %s did exist\n", name);
         return 1;
       }
-      if(fd >= 0)
+      if(fd >= 0) {
         close(fd);
+        unlink(name);
+      }
     }
   }
 
@@ -103,7 +103,6 @@ linkunlink(int seed)
   int pid, i;
   char *name = "linkunlink";
 
-  unlink(name);
   pid = fork();
   if(pid < 0){
     printf(1, "linkunlink: fork failed\n");
@@ -127,6 +126,7 @@ linkunlink(int seed)
   else
     exit();
 
+  unlink(name);
   return 0;
 }
 
@@ -271,6 +271,8 @@ sharedfd2(int fd, int seed)
     n1 = read(fdc, buf1, sizeof(buf1));
     n2 = read(fdp, buf2, sizeof(buf2));
     if((n1 == 0) && (n2 == 0)) {
+      close(fdc);
+      close(fdp);
       return 0;
     }
     if(n1 != n2) {
@@ -288,22 +290,20 @@ sharedfd2(int fd, int seed)
 
 // four processes write different files at the same
 // time, to test block allocation.
-// TODO: add this to module_3
-void
+int
 fourfiles(int seed)
 {
+  printf(1, "%d\n", seed);
   int fd, pid, i, j, n, total, pi;
   char names[4][4];
   char *fname;
 
   for(i = 0; i < 4; i++) {
-    names[i][0] = 'a' + seed % 26;
+    names[i][0] = 'f' + seed % 26;
     names[i][1] = 'a' + seed % 26;
     names[i][2] = '0' + i;
     names[i][3] = 0;
   }
-
-  printf(1, "fourfiles test\n");
 
   for(pi = 0; pi < 4; pi++){
     fname = names[pi];
@@ -311,22 +311,22 @@ fourfiles(int seed)
 
     pid = fork();
     if(pid < 0){
-      printf(1, "fork failed\n");
-      exit();
+      printf(1, "fourfiles: fork failed\n");
+      return 1;
     }
 
     if(pid == 0){
       fd = open(fname, O_CREATE | O_RDWR);
       if(fd < 0){
-        printf(1, "create failed\n");
-        exit();
+        printf(1, "fourfiles: create failed\n");
+        return 1;
       }
 
       memset(buf, '0'+pi, 512);
       for(i = 0; i < 12; i++){
         if((n = write(fd, buf, 500)) != 500){
-          printf(1, "write failed %d\n", n);
-          exit();
+          printf(1, "fourfiles: write failed %d\n", n);
+          return 1;
         }
       }
       exit();
@@ -337,35 +337,34 @@ fourfiles(int seed)
     wait();
   }
 
-  for(i = 0; i < 2; i++){
+  for(i = 0; i < 4; i++){
     fname = names[i];
     fd = open(fname, 0);
     total = 0;
     while((n = read(fd, buf, sizeof(buf))) > 0){
       for(j = 0; j < n; j++){
         if(buf[j] != '0'+i){
-          printf(1, "wrong char\n");
-          exit();
+          printf(1, "fourfiles: wrong char\n");
+          return 1;
         }
       }
       total += n;
     }
     close(fd);
     if(total != 12*500){
-      printf(1, "wrong length %d\n", total);
-      exit();
+      printf(1, "fourfiles: wrong length %d\n", total);
+      return 1;
     }
     unlink(fname);
   }
-
-  printf(1, "fourfiles ok\n");
+  return 0;
 }
 
 // test concurrent create/link/unlink of the same file
-// TODO: add this to module_3
-void
+int
 concreate(int seed)
 {
+  printf(1, "%d\n", seed);
   char file[3];
   int i, pid, n, fd;
   char fa[40];
@@ -374,23 +373,28 @@ concreate(int seed)
     char name[14];
   } de;
 
-  // int newpid = fork();
-  printf(1, "concreate test\n");
-  file[0] = 'C' + seed % 26;
+  int newpid = fork();
+  char ch = 'C' + seed % 26;
+  char fi[3];
+  fi[0] = ch;
+  fi[1] = '0';
+  fi[2] = 0;
+
+  file[0] = ch;
   file[2] = '\0';
   for(i = 0; i < 40; i++){
     file[1] = '0' + i;
     unlink(file);
     pid = fork();
     if(pid && (i % 3) == 1){
-      link("C0", file);
+      link(fi, file);
     } else if(pid == 0 && (i % 5) == 1){
-      link("C0", file);
+      link(fi, file);
     } else {
       fd = open(file, O_CREATE | O_RDWR);
       if(fd < 0){
-        printf(1, "concreate create %s failed\n", file);
-        exit();
+        printf(1, "concreate: create %s failed\n", file);
+        return 1;
       }
       close(fd);
     }
@@ -400,21 +404,26 @@ concreate(int seed)
       wait();
   }
 
+  if(newpid > 0)
+    wait();
+  else
+    exit();
+
   memset(fa, 0, sizeof(fa));
   fd = open(".", 0);
   n = 0;
   while(read(fd, &de, sizeof(de)) > 0){
     if(de.inum == 0)
       continue;
-    if(de.name[0] == 'C' && de.name[2] == '\0'){
+    if(de.name[0] == ch && de.name[2] == '\0'){
       i = de.name[1] - '0';
       if(i < 0 || i >= sizeof(fa)){
-        printf(1, "concreate weird file %s\n", de.name);
-        exit();
+        printf(1, "concreate: weird file %s\n", de.name);
+        return 1;
       }
       if(fa[i]){
-        printf(1, "concreate duplicate file %s\n", de.name);
-        exit();
+        printf(1, "concreate: duplicate file %s\n", de.name);
+        return 1;
       }
       fa[i] = 1;
       n++;
@@ -423,22 +432,15 @@ concreate(int seed)
   close(fd);
 
   if(n != 40){
-    printf(1, "concreate not enough files in directory listing\n");
-    exit();
+    printf(1, "concreate: not enough files in directory listing: file: %s ch: %c\n", file, ch);
+    return 1;
   }
-
-  /*
-  if(newpid > 0)
-    wait();
-  else
-    exit();
-    */
 
   for(i = 0; i < 40; i++){
     file[1] = '0' + i;
     pid = fork();
     if(pid < 0){
-      printf(1, "fork failed\n");
+      printf(1, "concreate: fork failed\n");
       exit();
     }
     if(((i % 3) == 0 && pid == 0) ||
@@ -458,8 +460,7 @@ concreate(int seed)
     else
       wait();
   }
-
-  printf(1, "concreate ok\n");
+  return 0;
 }
 
 int (*module_1[])(int) = {
@@ -470,13 +471,19 @@ int (*module_1[])(int) = {
 
 int (*module_2[])(int, int) = {
   [0] sharedfd,
-  [0] sharedfd2,
+  [1] sharedfd2,
+};
+
+int (*module_3[])(int) = {
+  [0] concreate,
+  [1] fourfiles,
 };
 
 void
 module1(void)
 {
   int uptime0 = uptime();
+  printf(1, "module 1 started\n");
   int ret, i;
   for(i = 0; i < NELEM(module_1)*NTHREADS; i++) {
     if(fork() == 0) {
@@ -495,11 +502,11 @@ module1(void)
   printf(1, "module 1 time: %d\n", uptime() - uptime0);
 }
 
-
 void
 module2(void)
 {
   int uptime0 = uptime();
+  printf(1, "module 2 started\n");
   int ret, i;
   int fd = open("sharedfd", O_CREATE | O_RDWR);
   if(fd < 0){
@@ -520,8 +527,33 @@ module2(void)
   }
   close(fd);
   unlink("sharedfd");
+  unlink("sharedfdc");
+  unlink("sharedfdp");
   printf(1, "module 2 passed\n");
   printf(1, "module 2 time: %d\n", uptime() - uptime0);
+}
+
+void
+module3(void)
+{
+  int uptime0 = uptime();
+  printf(1, "module 3 started\n");
+  int ret, i;
+  for(i = 0; i < NELEM(module_3)*NTHREADS; i++) {
+    if(fork() == 0) {
+      ret = module_3[i/NTHREADS](i%NTHREADS);
+      if(ret) {
+        dopanic("TEST FAILED\n");
+      }
+      exit();
+    }
+  }
+  // wait for all children
+  for(i = 0; i < NELEM(module_3)*NTHREADS; i++) {
+    wait();
+  }
+  printf(1, "module 3 passed\n");
+  printf(1, "module 3 time: %d\n", uptime() - uptime0);
 }
 
 int
@@ -542,8 +574,10 @@ main(int argc, char *argv[])
   close(open("usertests.ran", O_CREATE));
 
   int uptime0 = uptime();
+
   module1();
   module2();
+  module3();
   printf(1, "Total time: %d\n", uptime() - uptime0);
 
   exec("shutdown", shutdown_argv);
