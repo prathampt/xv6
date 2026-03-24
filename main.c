@@ -11,6 +11,9 @@ static void mpmain(void)  __attribute__((noreturn));
 extern pde_t *kpgdir;
 extern char end[]; // first address after kernel loaded from ELF file
 
+unsigned long long boot_tsc;
+unsigned long long cycles_per_us;   // e.g. 2000 for ~2 GHz
+
 // Bootstrap processor starts running C code here.
 // Allocate a real stack and switch to it, first
 // doing some setup required for memory allocator to work.
@@ -28,9 +31,13 @@ main(void)
   uartinit();      // serial port
   pinit();         // process table
   tvinit();        // trap vectors
+  if (cpuid() == 0) {
+    boot_tsc = rdtsc();
+    cycles_per_us = 2000;   // tune this to your QEMU/host CPU frequency
+  }
   binit();         // buffer cache
   fileinit();      // file table
-  ideinit();       // disk 
+  ideinit();       // disk
   startothers();   // start other processors
   kinit2(P2V(4*1024*1024), P2V(PHYSTOP)); // must come after startothers()
   userinit();      // first user process

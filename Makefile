@@ -166,6 +166,16 @@ mkfs: mkfs.c fs.h
 .PRECIOUS: %.o
 
 UPROGS=\
+	_time_pid\
+	_time_oc\
+	_time_read\
+	_time_write\
+	_time_cwd\
+	_time_mkrm\
+	_time_fork\
+	_time_fe\
+	_time_mv\
+	_exit\
 	_cat\
 	_echo\
 	_forktest\

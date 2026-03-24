@@ -181,3 +181,11 @@ struct trapframe {
   ushort ss;
   ushort padding6;
 };
+
+static inline unsigned long long
+rdtsc(void)
+{
+  unsigned int lo, hi;
+  asm volatile("rdtsc" : "=a" (lo), "=d" (hi));
+  return ((unsigned long long)hi << 32) | lo;
+}
