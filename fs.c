@@ -25,7 +25,7 @@
 static void itrunc(struct inode*);
 // there should be one superblock per disk device, but we run with
 // only one device
-struct superblock sb; 
+struct superblock sb;
 
 // Read the super block.
 void
@@ -172,7 +172,7 @@ void
 iinit(int dev)
 {
   int i = 0;
-  
+
   initlock(&icache.lock, "icache");
   for(i = 0; i < NINODE; i++) {
     initsleeplock(&icache.inode[i].lock, "inode");
@@ -351,12 +351,30 @@ iput(struct inode *ip)
   release(&icache.lock);
 }
 
-// Common idiom: unlock, then put.
 void
 iunlockput(struct inode *ip)
 {
-  iunlock(ip);
-  iput(ip);
+  if(ip == 0 || !holdingsleep(&ip->lock) || ip->ref < 1)
+    panic("iunlock");
+
+  if(ip->valid && ip->nlink == 0){
+    acquire(&icache.lock);
+    int r = ip->ref;
+    release(&icache.lock);
+    if(r == 1){
+      // inode has no links and no other references: truncate and free.
+      itrunc(ip);
+      ip->type = 0;
+      iupdate(ip);
+      ip->valid = 0;
+    }
+  }
+
+  releasesleep(&ip->lock);
+
+  acquire(&icache.lock);
+  ip->ref--;
+  release(&icache.lock);
 }
 
 //PAGEBREAK!
@@ -445,6 +463,7 @@ stati(struct inode *ip, struct stat *st)
   st->nlink = ip->nlink;
   st->size = ip->size;
 }
+
 
 //PAGEBREAK!
 // Read data from inode.

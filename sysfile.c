@@ -114,6 +114,7 @@ sys_fstat(void)
   return filestat(f, st);
 }
 
+
 // Create the path new as a link to the same inode as old.
 int
 sys_link(void)
@@ -125,6 +126,7 @@ sys_link(void)
     return -1;
 
   begin_op();
+
   if((ip = namei(old)) == 0){
     end_op();
     return -1;
@@ -374,7 +376,7 @@ sys_chdir(void)
   char *path;
   struct inode *ip;
   struct proc *curproc = myproc();
-  
+
   begin_op();
   if(argstr(0, &path) < 0 || (ip = namei(path)) == 0){
     end_op();

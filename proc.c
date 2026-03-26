@@ -152,7 +152,7 @@ userinit(void)
 
   release(&ptable.lock);
 }
-
+#define MAXVADDRSIZE (128*1024*1024)
 // Grow current process's memory by n bytes.
 // Return 0 on success, -1 on failure.
 int
@@ -163,7 +163,7 @@ growproc(int n)
 
   sz = curproc->sz;
   if(n > 0){
-    if((sz = allocuvm(curproc->pgdir, sz, sz + n)) == 0)
+    if((sz + n >= MAXVADDRSIZE) || (sz = allocuvm(curproc->pgdir, sz, sz + n)) == 0)
       return -1;
   } else if(n < 0){
     if((sz = deallocuvm(curproc->pgdir, sz, sz + n)) == 0)

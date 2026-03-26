@@ -37,5 +37,7 @@ main(int argc, char *argv[])
   int diff2 = uptime1 - uptime0;
   printf(1, "accurate time: %d us\n", (diff1 - diff2)/COUNT);
 
+  unlink("tmp");
+  unlink("tmp1");
   exit();
 }

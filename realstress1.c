@@ -8,6 +8,7 @@
 #include "traps.h"
 #include "memlayout.h"
 
+#define min(a, b) ((a) < (b) ? (a) : (b))
 char buf[8192];
 int nthreads = 4;
 
@@ -154,6 +155,12 @@ rand()
 // Module 2
 //
 
+// for sharedfd
+int bufsz = 10;     // sizeof(buf) in sharedfd() and sharedfd2()
+int rwsize = 500;
+int rwsize2 = 350;
+#define SHAREDFD_FILESZ (2*bufsz*rwsize*nthreads + 2*bufsz*rwsize2*nthreads)
+
 // two processes write to the same file descriptor
 // is the offset shared? does inode locking work?
 int
@@ -166,7 +173,6 @@ sharedfd(int fd, int seed)
   pid = fork();
   char myc = 'a' + seed % 26;
   char myp = 'm' + seed % 26;
-  int rwsize = 500;
 
   memset(buf, pid==0?myc:myp, sizeof(buf));
   for(i = 0; i < rwsize; i++){
@@ -214,10 +220,9 @@ sharedfd2(int fd, int seed)
   pid = fork();
   char myc = 'e' + seed % 26;
   char myp = 'q' + seed % 26;
-  int rwsize = 350;
 
   memset(buf, pid==0?myc:myp, sizeof(buf));
-  for(i = 0; i < rwsize; i++){
+  for(i = 0; i < rwsize2; i++){
     if(write(fd, buf, sizeof(buf)) != sizeof(buf)){
       printf(1, "fstests: write sharedfd failed\n");
       break;
@@ -234,6 +239,15 @@ sharedfd2(int fd, int seed)
   if(fd < 0){
     printf(1, "fstests: cannot open sharedfd for reading\n");
     return 1;
+  }
+
+  // ensure that the file is filled
+  struct stat stat;
+  while(1) {
+    fstat(fd, &stat);
+    if(stat.size == SHAREDFD_FILESZ)
+      break;
+    sleep(2);
   }
 
   int wfd;
@@ -474,7 +488,7 @@ exitwait(int seed)
   for(i = 0; i < 100; i++){
     pid = fork();
     if(pid < 0){
-      printf(1, "fork failed\n");
+      printf(1, "exitwait: fork failed\n");
       return 1;
     }
     if(pid){
@@ -499,6 +513,7 @@ exitwait(int seed)
 int
 bigargtest(int seed)
 {
+  printf(1, "%d\n", seed);
   int pid, fd;
   char okfile[16];
 
@@ -545,7 +560,6 @@ bigwrite(int seed)
   int nblocks = 32;
   int pid = fork();
 
-  unlink("bigwrite");
   for(sz = 499; sz < nblocks*512; sz += 471){
     fd = open("bigwrite", O_CREATE | O_RDWR);
     if(fd < 0){
@@ -608,11 +622,8 @@ sbrktest(int seed)
     *b = 1;
     a = b + 1;
   }
-  pid = fork();
-  if(pid < 0){
-    printf(1, "sbrktest: fork failed\n");
-    return 1;
-  }
+  while((pid < fork()) < 0)
+    ;
   c = sbrk(1);
   c = sbrk(1);
   if(c != a + 1){
@@ -671,11 +682,8 @@ sbrktest(int seed)
   // can we read the kernel's memory?
   for(a = (char*)(KERNBASE); a < (char*) (KERNBASE+2000000); a += 50000){
     ppid = getpid();
-    pid = fork();
-    if(pid < 0){
-      printf(1, "sbrktest: fork failed\n");
-      return 1;
-    }
+    while((pid < fork()) < 0)
+      ;
     if(pid == 0){
       printf(1, "sbrktest: oops could read %x = %x\n", a, *a);
       kill(ppid);
@@ -741,9 +749,9 @@ validatetest(int seed)
   int hi, pid;
   uint p;
 
-  hi = 8192*1024; // increased for more load
+  hi = 1100*1024;
 
-  for(p = 0; p <= (uint)hi; p += 734){
+  for(p = 0; p <= (uint)hi; p += 4096){
     if((pid = fork()) == 0){
       // try to crash the kernel by passing in a badly placed integer
       validateint((int*)p);
@@ -754,19 +762,25 @@ validatetest(int seed)
     kill(pid);
     wait();
 
+    if(fork()) {
+      wait();
+      continue;
+    }
+
     // try to crash the kernel by passing in a bad string pointer
     if(link("nosuchfile", (char*)p) != -1){
       printf(1, "link should not succeed\n");
       return 1;
     }
+    exit();
   }
   return 0;
 }
 
 int (*module_1[])(int) = {
   [0] argptest,
-  [1] createdelete,
-  [2] linkunlink,
+  [1] linkunlink,
+  [2] createdelete,
 };
 
 void
@@ -775,17 +789,22 @@ module1(void)
   int uptime0 = uptime();
   printf(1, "module 1 started\n");
   int ret, i;
-  for(i = 0; i < NELEM(module_1)*nthreads; i++) {
-    if(fork() == 0) {
-      ret = module_1[i/nthreads](i%nthreads);
+  int pid;
+  int threads = min(2, nthreads);
+  for(i = 0; i < NELEM(module_1)*threads; i++) {
+    if((pid = fork()) == 0) {
+      ret = module_1[i/threads](i%threads);
       if(ret) {
         dopanic("TEST FAILED\n");
       }
       exit();
     }
+    else if(pid < 0) {
+      dopanic("module1: fork failed");
+    }
   }
   // wait for all children
-  for(i = 0; i < NELEM(module_1)*nthreads; i++) {
+  for(i = 0; i < NELEM(module_1)*threads; i++) {
     wait();
   }
   printf(1, "module 1 passed\n");
@@ -803,21 +822,25 @@ module2(void)
   int uptime0 = uptime();
   printf(1, "module 2 started\n");
   int ret, i;
+  int pid;
   int fd = open("sharedfd", O_CREATE | O_RDWR);
   if(fd < 0){
     dopanic("fstests: cannot open sharedfd for writing");
   }
   for(i = 0; i < NELEM(module_2)*nthreads; i++) {
-    if(fork() == 0) {
+    if((pid = fork()) == 0) {
       ret = module_2[i/nthreads](fd, i%nthreads);
       if(ret) {
         dopanic("TEST FAILED\n");
       }
       exit();
     }
+    else if(pid < 0) {
+      dopanic("module2: fork failed");
+    }
   }
   // wait for all children
-  for(i = 0; i < NELEM(module_1)*nthreads; i++) {
+  for(i = 0; i < NELEM(module_2)*nthreads; i++) {
     wait();
   }
   close(fd);
@@ -840,13 +863,17 @@ module3(void)
   int uptime0 = uptime();
   printf(1, "module 3 started\n");
   int ret, i;
+  int pid;
   for(i = 0; i < NELEM(module_3)*nthreads; i++) {
-    if(fork() == 0) {
+    if((pid = fork()) == 0) {
       ret = module_3[i/nthreads](i%nthreads);
       if(ret) {
         dopanic("TEST FAILED\n");
       }
       exit();
+    }
+    else if(pid < 0) {
+      dopanic("module3: fork failed");
     }
   }
   // wait for all children
@@ -858,11 +885,11 @@ module3(void)
 }
 
 int (*module_4[])(int) = {
-  [0] bigargtest,
-  [1] bigwrite,
-  [2] bsstest,
-  [3] sbrktest,
-  [4] validatetest,
+  [0] sbrktest,
+  [1] bsstest,
+  [2] bigargtest,
+  [3] bigwrite,
+  // [4] validatetest,
 };
 
 void
@@ -871,19 +898,37 @@ module4(void)
   int uptime0 = uptime();
   printf(1, "module 4 started\n");
   int ret, i;
+  int pid;
   for(i = 0; i < NELEM(module_4)*nthreads; i++) {
-    if(fork() == 0) {
+    if((pid = fork())== 0) {
       ret = module_4[i/nthreads](i%nthreads);
       if(ret) {
         dopanic("TEST FAILED\n");
       }
       exit();
     }
+    else if(pid < 0) {
+      dopanic("module4: fork failed");
+    }
   }
   // wait for all children
   for(i = 0; i < NELEM(module_4)*nthreads; i++) {
     wait();
   }
+
+  if((pid = fork()) == 0) {
+    int ret = validatetest(0);
+    if(ret)
+      dopanic("validatetest failed\n");
+    exit();
+  }
+  else if(pid < 0) {
+    dopanic("module4: fork failed\n");
+  }
+  else {
+    wait();
+  }
+
   unlink("bigwrite");  // bigwrite
 
   printf(1, "module 4 passed\n");

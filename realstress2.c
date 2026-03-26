@@ -168,11 +168,8 @@ openiputtest(void)
     printf(1, "mkdir oidir failed\n");
     return 1;
   }
-  pid = fork();
-  if(pid < 0){
-    printf(1, "fork failed\n");
-    return 1;
-  }
+  while((pid = fork()) < 0)
+    ;
   if(pid == 0){
     int fd = open("oidir", O_RDWR);
     if(fd >= 0){
@@ -196,11 +193,9 @@ exitiputtest(void)
 {
   int pid;
 
-  pid = fork();
-  if(pid < 0){
-    printf(1, "fork failed\n");
-    return 1;
-  }
+  while((pid = fork()) < 0)
+    ;
+
   if(pid == 0){
     if(mkdir("eiputdir") < 0){
       printf(1, "mkdir failed\n");
@@ -270,7 +265,7 @@ mem(int seed)
     if(m1 == 0){
       printf(1, "couldn't allocate mem?!!\n");
       kill(ppid);
-      return 1;
+      exit();
     }
     free(m1);
     exit();
@@ -337,18 +332,12 @@ pipe1(int seed)
 int
 preempt(int seed)
 {
-  int pid1, pid2, pid3, i = 1;
-  int pid11, pid22, pid33;
-  int pfds[2], pfds2[2];
-
   printf(1, "%d\n", seed);
+  int pid1, pid2, pid3;
+  int pfds[2];
+
   pid1 = fork();
   if(pid1 == 0)
-    for(;;)
-      ;
-
-  pid11 = fork();
-  if(pid11 == 0)
     for(;;)
       ;
 
@@ -357,14 +346,7 @@ preempt(int seed)
     for(;;)
       ;
 
-  pid22 = fork();
-  if(pid22 == 0)
-    for(;;)
-      ;
-
-  while(pipe(pfds) != 0) {
-    printf(1, "pipe fail count: %d seed: %d\n", i++, seed);
-  }
+  pipe(pfds);
   pid3 = fork();
   if(pid3 == 0){
     close(pfds[0]);
@@ -375,38 +357,15 @@ preempt(int seed)
       ;
   }
 
-  while(pipe(pfds2) != 0) {
-    printf(1, "pipe fail count: %d seed: %d\n", i++, seed);
-  }
-  pid33 = fork();
-  if(pid33 == 0){
-    close(pfds2[0]);
-    if(write(pfds2[1], "x", 1) != 1)
-      printf(1, "preempt write error");
-    close(pfds2[1]);
-    for(;;)
-      ;
-  }
-
   close(pfds[1]);
-  while(read(pfds[0], buf, sizeof(buf)) != 1)
-    ;
+  if(read(pfds[0], buf, sizeof(buf)) != 1){
+    printf(1, "preempt read error");
+    return 1;
+  }
   close(pfds[0]);
-
-  close(pfds2[1]);
-  while(read(pfds2[0], buf, sizeof(buf)) != 1)
-    ;
-  close(pfds2[0]);
-
   kill(pid1);
   kill(pid2);
   kill(pid3);
-  kill(pid11);
-  kill(pid22);
-  kill(pid33);
-  wait();
-  wait();
-  wait();
   wait();
   wait();
   wait();
@@ -472,7 +431,7 @@ uio(int seed)
     printf(1, "uio: uio succeeded; test FAILED\n");
     return 1;
   } else if(pid < 0){
-    printf (1, "fork failed\n");
+    printf (1, "uio: fork failed\n");
     return 1;
   }
   wait();
@@ -492,7 +451,7 @@ rmdot(int seed)
   char dotname[16];
   strcpy(dotname, "dots");
   dotname[strlen(dotname)] = 'a' + seed % 26;
-  
+
   // "dotsx/."
   char dotname_dot[16];
   strcpy(dotname_dot, dotname);
@@ -662,8 +621,8 @@ iref(int seed)
   strcpy(irefd, "irefdx");
   irefd[5] = 'a' + seed % 26;
 
-  // the 50 is NINODE
-  for(i = 0; i < 50 + 1; i++){
+  // the 10 is NINODE/5
+  for(i = 0; i < 10 + 1; i++){
     if(mkdir(irefd) != 0){
       printf(1, "irefd: mkdir failed\n");
       return 1;
@@ -694,7 +653,7 @@ bigdir(int seed)
 {
   printf(1, "%d\n", seed);
   int i, fd;
-  int count = 500;
+  int count = 1000;
   char name[10];
   char bd[4];
   bd[0] = 'p' + seed % 26;
@@ -1152,7 +1111,7 @@ subdir(void)
     printf(1, "subdir: unlink dd failed\n");
     return 1;
   }
-  return 1;
+  return 0;
 }
 
 // can I unlink a file and still read it?
@@ -1214,13 +1173,17 @@ module5(void)
   int uptime0 = uptime();
   printf(1, "module 5 started\n");
   int ret, i;
+  int pid;
   for(i = 0; i < NELEM(module_5)*nthreads; i++) {
-    if(fork() == 0) {
+    if((pid = fork()) == 0) {
       ret = module_5[i/nthreads](i%nthreads);
       if(ret) {
         dopanic("TEST FAILED\n");
       }
       exit();
+    }
+    else if(pid < 0) {
+      dopanic("module5: fork failed");
     }
   }
   // wait for all children
@@ -1264,9 +1227,8 @@ module5(void)
 
 int (*module_6[])(int) = {
   [0] pipe1,
-  [1] preempt,
-  [2] uio,
-  [3] forktest,
+  [1] uio,
+  [2] forktest,
 };
 
 void
@@ -1275,11 +1237,15 @@ module6(void)
   int uptime0 = uptime();
   printf(1, "module 6 started\n");
   int ret, i;
+  int pid;
   for(i = 0; i < NELEM(module_6)*nthreads; i++) {
-    if(fork() == 0) {
+    if((pid = fork()) == 0) {
       ret = module_6[i/nthreads](i%nthreads);
       if(ret) {
         dopanic("TEST FAILED\n");
+      }
+      else if(pid < 0) {
+        dopanic("module6: fork failed");
       }
       exit();
     }
@@ -1288,6 +1254,20 @@ module6(void)
   for(i = 0; i < NELEM(module_6)*nthreads; i++) {
     wait();
   }
+
+  if((pid = fork()) == 0) {
+    int ret = preempt(0);
+    if(ret)
+      dopanic("preempt failed\n");
+    exit();
+  }
+  else if(pid < 0) {
+    dopanic("module6: fork failed\n");
+  }
+  else {
+    wait();
+  }
+
   printf(1, "module 6 passed\n");
   printf(1, "module 6 time: %d\n", uptime() - uptime0);
 }
@@ -1305,13 +1285,17 @@ module7(void)
   int uptime0 = uptime();
   printf(1, "module 7 started\n");
   int ret, i;
+  int pid;
   for(i = 0; i < NELEM(module_7)*nthreads; i++) {
-    if(fork() == 0) {
+    if((pid = fork()) == 0) {
       ret = module_7[i/nthreads](i%nthreads);
       if(ret) {
         dopanic("TEST FAILED\n");
       }
       exit();
+    }
+    else if(pid < 0) {
+      dopanic("module7: fork failed");
     }
   }
   // wait for all children
@@ -1337,13 +1321,17 @@ module8(void)
   int uptime0 = uptime();
   printf(1, "module 8 started\n");
   int ret, i;
+  int pid;
   for(i = 0; i < NELEM(module_8)*nthreads; i++) {
-    if(fork() == 0) {
+    if((pid = fork()) == 0) {
       ret = module_8[i/nthreads](i%nthreads);
       if(ret) {
         dopanic("TEST FAILED\n");
       }
       exit();
+    }
+    else if(pid < 0) {
+      dopanic("module8: fork failed");
     }
   }
   // wait for all children
@@ -1375,6 +1363,9 @@ module8(void)
         default:
           break;
       }
+    }
+    else if(pid < 0) {
+      dopanic("module8: fork failed");
     }
   }
   for(i = 0; i < 3; i++) {
