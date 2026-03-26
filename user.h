@@ -28,6 +28,7 @@ int sleep(int);
 int uptime(void);
 int poweroff(void);
 int dopanic(char *msg);
+int doyield(void);
 
 // ulib.c
 int stat(const char*, struct stat*);

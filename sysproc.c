@@ -92,15 +92,14 @@ sys_sleep(void)
 int
 sys_uptime(void)
 {
-  /*
   uint xticks;
 
   acquire(&tickslock);
   xticks = ticks;
   release(&tickslock);
   return xticks;
-  */
-  return (int)uptime_us();
+
+  // return (int)uptime_us();
 }
 
 int
@@ -112,3 +111,11 @@ sys_poweroff(void)
   // reboot on real hardware: outb(0x92, 0x01);
   return 0;
 }
+
+int
+sys_doyield(void)
+{
+  yield();
+  return 0;
+}
+

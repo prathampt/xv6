@@ -105,6 +105,7 @@ extern int sys_write(void);
 extern int sys_uptime(void);
 extern int sys_poweroff(void);
 extern int sys_dopanic(void);
+extern int sys_doyield(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -130,6 +131,7 @@ static int (*syscalls[])(void) = {
 [SYS_close]   sys_close,
 [SYS_poweroff]   sys_poweroff,
 [SYS_dopanic] sys_dopanic,
+[SYS_doyield] sys_doyield,
 };
 
 void

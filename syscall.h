@@ -22,3 +22,4 @@
 #define SYS_close  21
 #define SYS_poweroff  22
 #define SYS_dopanic  23
+#define SYS_doyield  24

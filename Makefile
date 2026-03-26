@@ -166,6 +166,7 @@ mkfs: mkfs.c fs.h
 .PRECIOUS: %.o
 
 UPROGS=\
+	_idle\
 	_time_pid\
 	_time_oc\
 	_time_read\

@@ -4,14 +4,16 @@
 #include "stat.h"
 #include "user.h"
 #include "fcntl.h"
+#include "param.h"
 
 char *argv[] = { "sh", 0 };
 char *stress_argv[] = { "realstress", "4", 0 };
+char *argv_idle[] = { "idle", 0 };
 
 int
 main(void)
 {
-  int pid, wpid;
+  int pid, wpid, i;
 
   if(open("console", O_RDWR) < 0){
     mknod("console", 1, 1);
@@ -20,6 +22,17 @@ main(void)
   dup(0);  // stdout
   dup(0);  // stderr
 
+  // Start idle tasks
+  for(i = 0; i < NCPU; i++) {
+    if((pid = fork()) == 0)
+      exec("idle", argv_idle);
+    else if(pid < 0)
+      dopanic("fork failed\n");
+    else
+      continue;
+  }
+
+  printf(1, "init: started %d idle tasks\n", NCPU);
   for(;;){
     printf(1, "init: starting sh\n");
     pid = fork();
