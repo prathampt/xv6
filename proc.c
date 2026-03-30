@@ -7,6 +7,12 @@
 #include "proc.h"
 #include "spinlock.h"
 
+struct rdyqueue {
+  struct spinlock lock;
+  struct proc *head;
+  struct proc *tail;
+} rdyqueue;
+
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
@@ -24,6 +30,7 @@ void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
+  initlock(&rdyqueue.lock, "rdyqueue");
 }
 
 // Must be called with interrupts disabled
@@ -148,6 +155,7 @@ userinit(void)
   // because the assignment might not be atomic.
   acquire(&ptable.lock);
 
+  rdy_enqueue(p);
   p->state = RUNNABLE;
 
   release(&ptable.lock);
@@ -215,6 +223,7 @@ fork(void)
   acquire(&ptable.lock);
 
   np->state = RUNNABLE;
+  rdy_enqueue(np);
 
   release(&ptable.lock);
 
@@ -330,26 +339,41 @@ scheduler(void)
     // Enable interrupts on this processor.
     sti();
 
+    acquire(&rdyqueue.lock);
+
+    // No process to schedule
+    if(!rdyqueue.head) {
+      release(&rdyqueue.lock);
+      continue;
+    }
+
+    // Dequeue a process
+    p = rdyqueue.head;
+    rdyqueue.head = p->rdynext;
+    if(!rdyqueue.head)
+      rdyqueue.tail = 0;
+    p->rdynext = 0;
+
+    release(&rdyqueue.lock);
+
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
 
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
+    // Switch to chosen process.  It is the process's job
+    // to release ptable.lock and then reacquire it
+    // before jumping back to us.
+    // The process should also enqueue itself to the ready queue
+    // in case it calls yield()
+    c->proc = p;
+    switchuvm(p);
+    p->state = RUNNING;
 
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
+    swtch(&(c->scheduler), p->context);
+    switchkvm();
 
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
-    }
+    // Process is done running for now.
+    // It should have changed its p->state before coming back.
+    c->proc = 0;
     release(&ptable.lock);
 
   }
@@ -381,12 +405,31 @@ sched(void)
   mycpu()->intena = intena;
 }
 
+void
+rdy_enqueue(struct proc *p)
+{
+  // Enqueue back in the ready queue
+  acquire(&rdyqueue.lock);
+  if(!rdyqueue.tail) {
+    rdyqueue.head = rdyqueue.tail = p;
+  }
+  else {
+    rdyqueue.tail->rdynext = p;
+    rdyqueue.tail = p;
+  }
+  p->rdynext = 0;
+  release(&rdyqueue.lock);
+  return;
+}
+
 // Give up the CPU for one scheduling round.
 void
 yield(void)
 {
+  struct proc *p = myproc();
   acquire(&ptable.lock);  //DOC: yieldlock
-  myproc()->state = RUNNABLE;
+  p->state = RUNNABLE;
+  rdy_enqueue(p);
   sched();
   release(&ptable.lock);
 }
@@ -460,8 +503,10 @@ wakeup1(void *chan)
   struct proc *p;
 
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
-    if(p->state == SLEEPING && p->chan == chan)
+    if(p->state == SLEEPING && p->chan == chan) {
       p->state = RUNNABLE;
+      rdy_enqueue(p);
+    }
 }
 
 // Wake up all processes sleeping on chan.
@@ -486,8 +531,10 @@ kill(int pid)
     if(p->pid == pid){
       p->killed = 1;
       // Wake process from sleep if necessary.
-      if(p->state == SLEEPING)
+      if(p->state == SLEEPING) {
         p->state = RUNNABLE;
+        rdy_enqueue(p);
+      }
       release(&ptable.lock);
       return 0;
     }

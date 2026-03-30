@@ -25,9 +25,6 @@ void
 acquire(struct spinlock *lk)
 {
   pushcli(); // disable interrupts to avoid deadlock.
-  if(holding(lk))
-    panic("acquire");
-
   // The xchg is atomic.
   while(xchg(&lk->locked, 1) != 0)
     ;
@@ -39,16 +36,13 @@ acquire(struct spinlock *lk)
 
   // Record info about lock acquisition for debugging.
   lk->cpu = mycpu();
-  getcallerpcs(&lk, lk->pcs);
+  // getcallerpcs(&lk, lk->pcs);
 }
 
 // Release the lock.
 void
 release(struct spinlock *lk)
 {
-  if(!holding(lk))
-    panic("release");
-
   lk->pcs[0] = 0;
   lk->cpu = 0;
 

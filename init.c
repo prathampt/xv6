@@ -23,6 +23,7 @@ main(void)
   dup(0);  // stderr
 
   // Start idle tasks
+  /*
   for(i = 0; i < NCPU; i++) {
     if((pid = fork()) == 0)
       exec("idle", argv_idle);
@@ -32,7 +33,9 @@ main(void)
       continue;
   }
 
+
   printf(1, "init: started %d idle tasks\n", NCPU);
+  */
   for(;;){
     printf(1, "init: starting sh\n");
     pid = fork();
